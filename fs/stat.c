@@ -149,10 +149,9 @@ EXPORT_SYMBOL(vfs_getattr);
  *
  * 0 will be returned on success, and a -ve error code if unsuccessful.
  */
-#ifdef CONFIG_KSU_SUSFS
-extern struct static_key_false ksu_init_rc_hook_key_false;
+#ifdef CONFIG_KSU_MANUAL_HOOK
 extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
-#endif // #ifdef CONFIG_KSU_SUSFS
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 int vfs_statx_fd(unsigned int fd, struct kstat *stat,
 		 u32 request_mask, unsigned int query_flags)
@@ -167,10 +166,9 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
 	if (f.file) {
 		error = vfs_getattr(&f.file->f_path, stat,
 				    request_mask, query_flags);
-#ifdef CONFIG_KSU_SUSFS
-		if (static_branch_unlikely(&ksu_init_rc_hook_key_false))
-			ksu_handle_vfs_fstat(fd, &stat->size);
-#endif // #ifdef CONFIG_KSU_SUSFS
+#ifdef CONFIG_KSU_MANUAL_HOOK
+		ksu_handle_vfs_fstat(fd, &stat->size);
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 		fdput(f);
 	}
@@ -193,9 +191,7 @@ EXPORT_SYMBOL(vfs_statx_fd);
  *
  * 0 will be returned on success, and a -ve error code if unsuccessful.
  */
-#ifdef CONFIG_KSU_SUSFS
-extern bool ksu_su_compat_enabled __read_mostly;
-extern bool __ksu_is_allow_uid_for_current(uid_t uid);
+#ifdef CONFIG_KSU_MANUAL_HOOK
 extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
 #endif
 
@@ -206,14 +202,8 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
 	int error = -EINVAL;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
 
-#ifdef CONFIG_KSU_SUSFS
-	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled) {
-		goto orig_flow;
-	}
-	if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val))) {
-		ksu_handle_stat(&dfd, &filename, &flags);
-	}
-orig_flow:
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	(void)ksu_handle_stat(&dfd, &filename, &flags);
 #endif
 
 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
