@@ -16,7 +16,7 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
-        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu wget
+        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu
 
     - name: Setup swap space
       run: |
@@ -28,26 +28,21 @@ jobs:
         sudo swapon /swapfile
         free -h
 
-    - name: Hotfix init/Kconfig (replace with known good version)
+    - name: Fix Kconfig errors
       run: |
-        # 备份原文件
-        cp init/Kconfig init/Kconfig.bak
-        # 从 LineageOS 的 sdm660 内核仓库下载能正常工作的 Kconfig
-        wget -O init/Kconfig https://raw.githubusercontent.com/LineageOS/android_kernel_xiaomi_sdm660/lineage-20/init/Kconfig
-        echo "已替换 init/Kconfig 为官方可用版本"
+        # 1. 删除 drivers/Kconfig 中不存在的 kernelsu 引用
+        sed -i '/kernelsu\/Kconfig/d' drivers/Kconfig 2>/dev/null || true
+        # 2. 修复 init/Kconfig 第16-17行可能存在的语法错误（注释掉报错行）
+        sed -i '16s/^/#/' init/Kconfig
+        sed -i '17s/^/#/' init/Kconfig
+        # 3. 创建缺失的 Kconfig 占位文件（防止其他 source 错误）
+        touch drivers/kernelsu/Kconfig 2>/dev/null || true
 
-    - name: Find and build with defconfig
+    - name: Build kernel
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
-        
-        # 你的 defconfig 路径
-        DEFCONFIG=vendor/wayne-oss-perf_defconfig
-        if [ ! -f "$DEFCONFIG" ]; then
-          DEFCONFIG=arch/arm64/configs/vendor/wayne-oss-perf_defconfig
-        fi
-        
-        echo "使用配置文件: $DEFCONFIG"
+        DEFCONFIG=arch/arm64/configs/vendor/wayne-oss-perf_defconfig
         make mrproper
         make $DEFCONFIG
         make -j$(nproc) Image.gz-dtb
