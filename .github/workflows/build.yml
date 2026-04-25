@@ -1,0 +1,44 @@
+name: Build GSKernel wayne
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Install build dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
+        git zip curl libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu
+
+    - name: Maximize swap space
+      run: |
+        sudo fallocate -l 4G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        free -h
+
+    - name: Build kernel
+      run: |
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        make mrproper
+        make arch/arm64/configs/vendor/wayne-oss-perf_defconfig
+        make -j$(nproc) Image.gz-dtb
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-images
+        path: |
+          arch/arm64/boot/Image
+          arch/arm64/boot/Image.gz
+          arch/arm64/boot/Image.gz-dtb
