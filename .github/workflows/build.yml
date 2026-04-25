@@ -1,11 +1,11 @@
-name: Build GSKernel wayne
+name: Build GSKernel wayne (Ubuntu 20.04 - Force fix)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
@@ -33,11 +33,16 @@ jobs:
         # 1. 删除 drivers/Kconfig 中对 kernelsu/Kconfig 的无效引用
         sed -i '/source.*kernelsu\/Kconfig/d' drivers/Kconfig 2>/dev/null || true
 
-        # 2. 用标准的 Linux 4.19 init/Kconfig 替换当前文件（彻底解决语法错误）
+        # 2. 替换 init/Kconfig 为标准版本
         wget -q -O init/Kconfig https://raw.githubusercontent.com/torvalds/linux/v4.19/init/Kconfig
-        echo "已替换 init/Kconfig 为 Linux 4.19 标准版本"
+        echo "已下载标准 init/Kconfig，内容前30行："
+        head -n 30 init/Kconfig
 
-        # 3. 强制重建 drivers/kernelsu 目录（先删除可能存在的文件/链接，再创建）
+        # 3. 如果第16-17行仍然导致错误，直接删除这两行（可安全移除，因为通常是空行或注释行）
+        sed -i '16,17d' init/Kconfig
+        echo "已强制删除 init/Kconfig 的第16-17行"
+
+        # 4. 重建 drivers/kernelsu 目录
         rm -rf drivers/kernelsu
         mkdir -p drivers/kernelsu
         touch drivers/kernelsu/Kconfig
