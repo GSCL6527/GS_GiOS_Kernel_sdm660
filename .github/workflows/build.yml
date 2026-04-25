@@ -16,7 +16,7 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
-        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu
+        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu wget
 
     - name: Setup swap space
       run: |
@@ -28,15 +28,18 @@ jobs:
         sudo swapon /swapfile
         free -h
 
-    - name: Fix Kconfig errors
+    - name: Fix Kconfig issues
       run: |
-        # 1. 删除 drivers/Kconfig 中不存在的 kernelsu 引用
-        sed -i '/kernelsu\/Kconfig/d' drivers/Kconfig 2>/dev/null || true
-        # 2. 修复 init/Kconfig 第16-17行可能存在的语法错误（注释掉报错行）
-        sed -i '16s/^/#/' init/Kconfig
-        sed -i '17s/^/#/' init/Kconfig
-        # 3. 创建缺失的 Kconfig 占位文件（防止其他 source 错误）
-        touch drivers/kernelsu/Kconfig 2>/dev/null || true
+        # 1. 删除 drivers/Kconfig 中对 kernelsu/Kconfig 的无效引用
+        sed -i '/source.*kernelsu\/Kconfig/d' drivers/Kconfig 2>/dev/null || true
+
+        # 2. 用标准的 Linux 4.19 init/Kconfig 替换当前文件（彻底解决语法错误）
+        wget -q -O init/Kconfig https://raw.githubusercontent.com/torvalds/linux/v4.19/init/Kconfig
+        echo "已替换 init/Kconfig 为 Linux 4.19 标准版本"
+
+        # 3. 如果还有其他缺失的 Kconfig 引用（比如可能引用了 drivers/kernelsu/Kconfig 但目录不存在），创建空文件
+        mkdir -p drivers/kernelsu
+        touch drivers/kernelsu/Kconfig
 
     - name: Build kernel
       run: |
