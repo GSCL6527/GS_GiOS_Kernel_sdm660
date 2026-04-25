@@ -16,11 +16,10 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
-        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu
+        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu wget
 
     - name: Setup swap space
       run: |
-        # 先关闭并删除已有的 swapfile（避免 Text file busy）
         sudo swapoff /swapfile 2>/dev/null || true
         sudo rm -f /swapfile
         sudo fallocate -l 4G /swapfile
@@ -29,20 +28,23 @@ jobs:
         sudo swapon /swapfile
         free -h
 
+    - name: Hotfix init/Kconfig (replace with known good version)
+      run: |
+        # 备份原文件
+        cp init/Kconfig init/Kconfig.bak
+        # 从 LineageOS 的 sdm660 内核仓库下载能正常工作的 Kconfig
+        wget -O init/Kconfig https://raw.githubusercontent.com/LineageOS/android_kernel_xiaomi_sdm660/lineage-20/init/Kconfig
+        echo "已替换 init/Kconfig 为官方可用版本"
+
     - name: Find and build with defconfig
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
         
-        # 根据你的仓库结构自动查找 defconfig（可根据实际情况修改）
-        if [ -f "vendor/wayne-oss-perf_defconfig" ]; then
-          DEFCONFIG=vendor/wayne-oss-perf_defconfig
-        elif [ -f "arch/arm64/configs/vendor/wayne-oss-perf_defconfig" ]; then
+        # 你的 defconfig 路径
+        DEFCONFIG=vendor/wayne-oss-perf_defconfig
+        if [ ! -f "$DEFCONFIG" ]; then
           DEFCONFIG=arch/arm64/configs/vendor/wayne-oss-perf_defconfig
-        else
-          echo "::error::未找到 wayne-oss-perf_defconfig，请检查仓库路径"
-          find . -name "*defconfig" | head -10
-          exit 1
         fi
         
         echo "使用配置文件: $DEFCONFIG"
