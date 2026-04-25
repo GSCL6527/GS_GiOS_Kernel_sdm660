@@ -12,26 +12,42 @@ jobs:
       with:
         fetch-depth: 1
 
-    - name: Install build dependencies
+    - name: Install dependencies
       run: |
         sudo apt update
         sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
-        git zip curl libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu
+        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu
 
-    - name: Maximize swap space
+    - name: Setup swap space
       run: |
+        # 先关闭并删除已有的 swapfile（避免 Text file busy）
+        sudo swapoff /swapfile 2>/dev/null || true
+        sudo rm -f /swapfile
         sudo fallocate -l 4G /swapfile
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
         free -h
 
-    - name: Build kernel
+    - name: Find and build with defconfig
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
+        
+        # 根据你的仓库结构自动查找 defconfig（可根据实际情况修改）
+        if [ -f "vendor/wayne-oss-perf_defconfig" ]; then
+          DEFCONFIG=vendor/wayne-oss-perf_defconfig
+        elif [ -f "arch/arm64/configs/vendor/wayne-oss-perf_defconfig" ]; then
+          DEFCONFIG=arch/arm64/configs/vendor/wayne-oss-perf_defconfig
+        else
+          echo "::error::未找到 wayne-oss-perf_defconfig，请检查仓库路径"
+          find . -name "*defconfig" | head -10
+          exit 1
+        fi
+        
+        echo "使用配置文件: $DEFCONFIG"
         make mrproper
-        make arch/arm64/configs/vendor/wayne-oss-perf_defconfig
+        make $DEFCONFIG
         make -j$(nproc) Image.gz-dtb
 
     - name: Upload artifacts
