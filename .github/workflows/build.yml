@@ -37,7 +37,7 @@ jobs:
         wget -q -O init/Kconfig https://raw.githubusercontent.com/torvalds/linux/v4.19/init/Kconfig
         echo "已替换 init/Kconfig 为 Linux 4.19 标准版本"
 
-        # 3. 如果还有其他缺失的 Kconfig 引用（比如可能引用了 drivers/kernelsu/Kconfig 但目录不存在），创建空文件
+        # 3. 创建缺失的 Kconfig 占位文件（使用 -p 确保目录存在时不报错）
         mkdir -p drivers/kernelsu
         touch drivers/kernelsu/Kconfig
 
