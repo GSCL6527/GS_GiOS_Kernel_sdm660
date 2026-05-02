@@ -1,4 +1,4 @@
-name: Build Kernel Wayne
+name: Build Kernel Wayne (ReKSU direct clone)
 
 on:
   workflow_dispatch:
