@@ -1,4 +1,4 @@
-name: Build GSKernel wayne (Ubuntu 20.04 - Force fix)
+name: Build Kernel Wayne
 
 on:
   workflow_dispatch:
@@ -7,18 +7,21 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-    - name: Checkout source
+    - name: Checkout source code
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
 
-    - name: Install dependencies
+    - name: Install build dependencies
       run: |
         sudo apt update
-        sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
-        git zip libncurses5-dev device-tree-compiler gcc-aarch64-linux-gnu wget
+        sudo apt install -y bc bison build-essential ccache curl flex g++-multilib \
+        gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev \
+        lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 \
+        libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop \
+        pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev adb fastboot
 
-    - name: Setup swap space
+    - name: Setup swap space (avoid OOM)
       run: |
         sudo swapoff /swapfile 2>/dev/null || true
         sudo rm -f /swapfile
@@ -28,39 +31,31 @@ jobs:
         sudo swapon /swapfile
         free -h
 
-    - name: Fix Kconfig issues
+    - name: Download Clang toolchain (Proton Clang)
       run: |
-        # 1. 删除 drivers/Kconfig 中对 kernelsu/Kconfig 的无效引用
-        sed -i '/source.*kernelsu\/Kconfig/d' drivers/Kconfig 2>/dev/null || true
+        git clone https://github.com/kdrag0n/proton-clang.git --depth=1 $HOME/kernel/toolchains
+        echo "$HOME/kernel/toolchains/bin" >> $GITHUB_PATH
 
-        # 2. 替换 init/Kconfig 为标准版本
-        wget -q -O init/Kconfig https://raw.githubusercontent.com/torvalds/linux/v4.19/init/Kconfig
-        echo "已下载标准 init/Kconfig，内容前30行："
-        head -n 30 init/Kconfig
-
-        # 3. 如果第16-17行仍然导致错误，直接删除这两行（可安全移除，因为通常是空行或注释行）
-        sed -i '16,17d' init/Kconfig
-        echo "已强制删除 init/Kconfig 的第16-17行"
-
-        # 4. 重建 drivers/kernelsu 目录
-        rm -rf drivers/kernelsu
-        mkdir -p drivers/kernelsu
-        touch drivers/kernelsu/Kconfig
-
-    - name: Build kernel
+    - name: Set environment variables
       run: |
-        export ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        DEFCONFIG=arch/arm64/configs/vendor/wayne-oss-perf_defconfig
-        make mrproper
-        make $DEFCONFIG
-        make -j$(nproc) Image.gz-dtb
+        echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
+        echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
+        echo "ARCH=arm64" >> $GITHUB_ENV
+        echo "CC=clang" >> $GITHUB_ENV
 
-    - name: Upload artifacts
+    - name: Configure kernel (wayne-oss-perf_defconfig)
+      run: |
+        make O=out ARCH=arm64 CC=clang vendor/wayne-oss-perf_defconfig
+
+    - name: Compile kernel
+      run: |
+        make O=out ARCH=arm64 CC=clang -j$(nproc)
+
+    - name: Upload kernel images
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-images
+        name: kernel-wayne
         path: |
-          arch/arm64/boot/Image
-          arch/arm64/boot/Image.gz
-          arch/arm64/boot/Image.gz-dtb
+          out/arch/arm64/boot/Image
+          out/arch/arm64/boot/Image.gz
+          out/arch/arm64/boot/Image.gz-dtb
