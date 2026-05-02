@@ -1,35 +1,26 @@
-name: Build Kernel (Wayne with ReKSU)
+name: Build Kernel Wayne
 
 on:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release Tag (e.g., v1.0.0)'
-        required: true
-        default: 'nightly'
-        type: string
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-
     steps:
-    - name: Checkout Source
+    - name: Checkout source
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
 
-    - name: Install Build Tools
+    - name: Install dependencies
       run: |
         sudo apt update
         sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev adb fastboot
 
-    - name: Maximize Build Space & Force Swap
+    - name: Maximize build space and swap
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell
-        sudo swapoff /swapfile || true
+        sudo swapoff /swapfile 2>/dev/null || true
         sudo rm -f /swapfile
         sudo fallocate -l 4G /swapfile
         sudo chmod 600 /swapfile
@@ -37,32 +28,29 @@ jobs:
         sudo swapon /swapfile
         free -h
 
-    - name: Download Toolchain (Proton Clang)
+    - name: Download Proton Clang
       run: |
         git clone https://github.com/kdrag0n/proton-clang.git --depth=1 $GITHUB_WORKSPACE/clang
 
-    - name: Manual ReKSU (ReSukiSU) Integration
+    - name: Clone ReSukiSU into KernelSU (as original symlink)
       run: |
-        # 1. 清除旧的残留，确保干净环境
+        # 删除可能存在的 KernelSU 文件/链接/目录
+        rm -rf KernelSU
+        # 克隆整个 ReSukiSU 仓库（4.19 分支）
+        git clone https://github.com/ReSukiSU/ReSukiSU-KernelSU.git --depth=1 -b 4.19 KernelSU
+        # 创建 drivers/kernelsu 软链接指向 KernelSU/kernel
         rm -rf drivers/kernelsu
-        
-        # 2. 克隆 ReSukiSU 源码（适配 4.19 内核的分支）
-        mkdir -p drivers/kernelsu
-        git clone https://github.com/ReSukiSU/ReSukiSU-KernelSU drivers/kernelsu --depth=1 -b 4.19
-        
-        # 3. 修改内核编译系统，确保 Kconfig 和 Makefile 能被正确引用
-        # 移除可能存在的旧引用，避免重复
-        sed -i '/kernelsu/d' drivers/Kconfig
-        sed -i '/kernelsu/d' drivers/Makefile
-        
-        # 添加正确的引用
-        echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-        echo 'obj-y += kernelsu/' >> drivers/Makefile
+        ln -sf ../KernelSU/kernel drivers/kernelsu
+        # 确保 drivers/Kconfig 中有 source 引用（如果原本有就不用重复添加，但为了安全，检查并添加）
+        if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
+          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+        fi
+        # 确保 drivers/Makefile 中有 obj-y 引用
+        if ! grep -q "kernelsu/" drivers/Makefile; then
+          echo 'obj-y += kernelsu/' >> drivers/Makefile
+        fi
 
-        echo "ReKSU integration completed."
-
-    - name: Build Kernel (In-Tree)
-      id: build
+    - name: Build kernel
       run: |
         export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
         export ARCH=arm64
@@ -85,14 +73,10 @@ jobs:
         make vendor/wayne-oss-perf_defconfig $MAKE_ARGS EXTRAVERSION="-ReKSU-$(date +%Y%m%d)"
         make -j$(nproc --all) $MAKE_ARGS EXTRAVERSION="-ReKSU-$(date +%Y%m%d)" || make -j1 $MAKE_ARGS EXTRAVERSION="-ReKSU-$(date +%Y%m%d)"
 
-        KERNEL_VER=$(make kernelversion 2>/dev/null | tail -1)
-        echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
-
-    - name: Prepare AnyKernel3
+    - name: Package with AnyKernel3
       run: |
         git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
         cp arch/arm64/boot/Image.gz-dtb AnyKernel3/
-
         cd AnyKernel3
         cat > anykernel.sh << 'EOF'
         kernel.string=ReKSU_Kernel_Wayne by GSCL6527
@@ -107,22 +91,12 @@ jobs:
         is_slot_device=0;
         ramdisk_compression=auto;
         EOF
-
         rm -f *placeholder
-        zip -r9 ../Kernel-Wayne-${{ env.KERNEL_VER }}-ReKSU.zip * -x .git README.md
+        zip -r9 ../Kernel-Wayne-$(date +%Y%m%d)-ReKSU.zip *
         cd ..
 
-    - name: Create Release and Upload Asset
-      uses: softprops/action-gh-release@v2
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: ${{ github.event.inputs.release_tag }}
-        name: Kernel Release ${{ github.event.inputs.release_tag }}
-        body: |
-          ### Compilation Info
-          - **Kernel Version**: `${{ env.KERNEL_VER }}`
-          - **Build Time**: `$(date -u +"%Y-%m-%d %H:%M:%S UTC")`
-          - **Built-in**: ReKSU (ReSukiSU)
-          - **Compiler**: Proton Clang
-        files: Kernel-Wayne-*.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: Kernel-Wayne-ReKSU
+        path: Kernel-Wayne-*.zip
