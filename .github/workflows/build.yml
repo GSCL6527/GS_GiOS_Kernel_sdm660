@@ -1,4 +1,4 @@
-name: Build Kernel Wayne (ReKSU via wget)
+name: Build Kernel Wayne (ReKSU via wget - debug)
 
 on:
   workflow_dispatch:
@@ -34,25 +34,44 @@ jobs:
 
     - name: Download and setup ReSukiSU (KernelSU replacement)
       run: |
-        # 删除可能存在的 KernelSU 文件/链接/目录
+        set -e  # 遇到错误立即退出
+        echo "Current directory: $(pwd)"
+        echo "Removing existing KernelSU..."
         rm -rf KernelSU
-        # 使用 wget 下载 4.19 分支的 ZIP 包
-        wget -q https://github.com/ReSukiSU/ReSukiSU-KernelSU/archive/refs/heads/4.19.zip -O /tmp/ReSukiSU-4.19.zip
+        
+        echo "Downloading ReSukiSU 4.19 branch..."
+        wget --verbose https://github.com/ReSukiSU/ReSukiSU-KernelSU/archive/refs/heads/4.19.zip -O /tmp/ReSukiSU-4.19.zip
+        if [ ! -f /tmp/ReSukiSU-4.19.zip ]; then
+          echo "ERROR: Download failed, file not found."
+          exit 1
+        fi
+        ls -lh /tmp/ReSukiSU-4.19.zip
+        
+        echo "Unzipping..."
         unzip -q /tmp/ReSukiSU-4.19.zip -d /tmp
+        if [ ! -d "/tmp/ReSukiSU-KernelSU-4.19" ]; then
+          echo "ERROR: Unzip did not create expected directory. Contents of /tmp:"
+          ls -la /tmp/
+          exit 1
+        fi
+        
+        echo "Moving to KernelSU directory..."
         mv /tmp/ReSukiSU-KernelSU-4.19 KernelSU
         rm /tmp/ReSukiSU-4.19.zip
-
-        # 创建软链接：drivers/kernelsu -> ../KernelSU/kernel
+        
+        echo "Creating soft link drivers/kernelsu -> ../KernelSU/kernel"
         rm -rf drivers/kernelsu
         ln -sf ../KernelSU/kernel drivers/kernelsu
-
-        # 确保内核编译系统引用该模块
+        
+        echo "Ensuring Kconfig and Makefile references..."
         if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
         fi
         if ! grep -q "kernelsu/" drivers/Makefile; then
           echo 'obj-y += kernelsu/' >> drivers/Makefile
         fi
+        
+        echo "ReSukiSU setup completed successfully."
 
     - name: Build kernel
       run: |
