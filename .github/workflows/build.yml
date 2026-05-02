@@ -1,4 +1,4 @@
-name: Build Kernel Wayne (ReKSU direct clone)
+name: Build Kernel Wayne (ReKSU via wget)
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev adb fastboot
+        sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev adb fastboot wget unzip
 
     - name: Maximize build space and swap
       run: |
@@ -32,20 +32,24 @@ jobs:
       run: |
         git clone https://github.com/kdrag0n/proton-clang.git --depth=1 $GITHUB_WORKSPACE/clang
 
-    - name: Clone ReSukiSU into KernelSU (as original symlink)
+    - name: Download and setup ReSukiSU (KernelSU replacement)
       run: |
         # 删除可能存在的 KernelSU 文件/链接/目录
         rm -rf KernelSU
-        # 克隆整个 ReSukiSU 仓库（4.19 分支）
-        git clone https://github.com/ReSukiSU/ReSukiSU-KernelSU.git --depth=1 -b 4.19 KernelSU
-        # 创建 drivers/kernelsu 软链接指向 KernelSU/kernel
+        # 使用 wget 下载 4.19 分支的 ZIP 包
+        wget -q https://github.com/ReSukiSU/ReSukiSU-KernelSU/archive/refs/heads/4.19.zip -O /tmp/ReSukiSU-4.19.zip
+        unzip -q /tmp/ReSukiSU-4.19.zip -d /tmp
+        mv /tmp/ReSukiSU-KernelSU-4.19 KernelSU
+        rm /tmp/ReSukiSU-4.19.zip
+
+        # 创建软链接：drivers/kernelsu -> ../KernelSU/kernel
         rm -rf drivers/kernelsu
         ln -sf ../KernelSU/kernel drivers/kernelsu
-        # 确保 drivers/Kconfig 中有 source 引用（如果原本有就不用重复添加，但为了安全，检查并添加）
+
+        # 确保内核编译系统引用该模块
         if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
         fi
-        # 确保 drivers/Makefile 中有 obj-y 引用
         if ! grep -q "kernelsu/" drivers/Makefile; then
           echo 'obj-y += kernelsu/' >> drivers/Makefile
         fi
