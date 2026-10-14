@@ -75,7 +75,6 @@
 
 #include "binder_internal.h"
 #include "binder_trace.h"
-#include "dbitmap.h"
 
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
@@ -176,23 +175,15 @@ static inline void binder_user_error(const char *fmt, ...)
 #define to_binder_fd_array_object(hdr) \
 	container_of(hdr, struct binder_fd_array_object, hdr)
 
-enum binder_stat_types {
-	BINDER_STAT_PROC,
-	BINDER_STAT_THREAD,
-	BINDER_STAT_NODE,
-	BINDER_STAT_REF,
-	BINDER_STAT_DEATH,
-	BINDER_STAT_TRANSACTION,
-	BINDER_STAT_TRANSACTION_COMPLETE,
-	BINDER_STAT_COUNT
-};
-
-struct binder_stats {
-	atomic_t br[_IOC_NR(BR_ONEWAY_SPAM_SUSPECT) + 1];
-	atomic_t bc[_IOC_NR(BC_REPLY_SG) + 1];
-	atomic_t obj_created[BINDER_STAT_COUNT];
-	atomic_t obj_deleted[BINDER_STAT_COUNT];
-};
+static struct kmem_cache *binder_node_pool;
+static struct kmem_cache *binder_eproc_pool;
+static struct kmem_cache *binder_ref_death_pool;
+static struct kmem_cache *binder_ref_pool;
+static struct kmem_cache *binder_thread_pool;
+static struct kmem_cache *binder_transaction_pool;
+static struct kmem_cache *binder_work_pool;
+static struct kmem_cache *binder_twcb_pool;
+static struct kmem_cache *binder_fixup_pool;
 
 #ifdef CONFIG_ANDROID_BINDER_LOGS
 static struct binder_stats binder_stats;
@@ -229,334 +220,14 @@ static struct binder_transaction_log_entry *binder_transaction_log_add(
 	memset(e, 0, sizeof(*e));
 	return e;
 }
-
-/**
- * struct binder_work - work enqueued on a worklist
- * @entry:             node enqueued on list
- * @type:              type of work to be performed
- *
- * There are separate work lists for proc, thread, and node (async).
- */
-struct binder_work {
-	struct list_head entry;
-
-	enum binder_work_type {
-		BINDER_WORK_TRANSACTION = 1,
-		BINDER_WORK_TRANSACTION_COMPLETE,
-		BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT,
-		BINDER_WORK_RETURN_ERROR,
-		BINDER_WORK_NODE,
-		BINDER_WORK_DEAD_BINDER,
-		BINDER_WORK_DEAD_BINDER_AND_CLEAR,
-		BINDER_WORK_CLEAR_DEATH_NOTIFICATION,
-	} type;
-};
-
-struct binder_error {
-	struct binder_work work;
-	uint32_t cmd;
-};
-
-/**
- * struct binder_node - binder node bookkeeping
- * @debug_id:             unique ID for debugging
- *                        (invariant after initialized)
- * @lock:                 lock for node fields
- * @work:                 worklist element for node work
- *                        (protected by @proc->inner_lock)
- * @rb_node:              element for proc->nodes tree
- *                        (protected by @proc->inner_lock)
- * @dead_node:            element for binder_dead_nodes list
- *                        (protected by binder_dead_nodes_lock)
- * @proc:                 binder_proc that owns this node
- *                        (invariant after initialized)
- * @refs:                 list of references on this node
- *                        (protected by @lock)
- * @internal_strong_refs: used to take strong references when
- *                        initiating a transaction
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @local_weak_refs:      weak user refs from local process
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @local_strong_refs:    strong user refs from local process
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @tmp_refs:             temporary kernel refs
- *                        (protected by @proc->inner_lock while @proc
- *                        is valid, and by binder_dead_nodes_lock
- *                        if @proc is NULL. During inc/dec and node release
- *                        it is also protected by @lock to provide safety
- *                        as the node dies and @proc becomes NULL)
- * @ptr:                  userspace pointer for node
- *                        (invariant, no lock needed)
- * @cookie:               userspace cookie for node
- *                        (invariant, no lock needed)
- * @has_strong_ref:       userspace notified of strong ref
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @pending_strong_ref:   userspace has acked notification of strong ref
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @has_weak_ref:         userspace notified of weak ref
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @pending_weak_ref:     userspace has acked notification of weak ref
- *                        (protected by @proc->inner_lock if @proc
- *                        and by @lock)
- * @has_async_transaction: async transaction to node in progress
- *                        (protected by @lock)
- * @sched_policy:         minimum scheduling policy for node
- *                        (invariant after initialized)
- * @accept_fds:           file descriptor operations supported for node
- *                        (invariant after initialized)
- * @min_priority:         minimum scheduling priority
- *                        (invariant after initialized)
- * @inherit_rt:           inherit RT scheduling policy from caller
- * @txn_security_ctx:     require sender's security context
- *                        (invariant after initialized)
- * @async_todo:           list of async work items
- *                        (protected by @proc->inner_lock)
- *
- * Bookkeeping structure for binder nodes.
- */
-struct binder_node {
-	int debug_id;
-	spinlock_t lock;
-	struct binder_work work;
-	union {
-		struct rb_node rb_node;
-		struct hlist_node dead_node;
-	};
-	struct binder_proc *proc;
-	struct hlist_head refs;
-	int internal_strong_refs;
-	int local_weak_refs;
-	int local_strong_refs;
-	int tmp_refs;
-	binder_uintptr_t ptr;
-	binder_uintptr_t cookie;
-	struct {
-		/*
-		 * bitfield elements protected by
-		 * proc inner_lock
-		 */
-		u8 has_strong_ref:1;
-		u8 pending_strong_ref:1;
-		u8 has_weak_ref:1;
-		u8 pending_weak_ref:1;
-	};
-	struct {
-		/*
-		 * invariant after initialization
-		 */
-		u8 sched_policy:2;
-		u8 inherit_rt:1;
-		u8 accept_fds:1;
-		u8 txn_security_ctx:1;
-		u8 min_priority;
-	};
-	bool has_async_transaction;
-	struct list_head async_todo;
-};
-
-struct binder_ref_death {
-	/**
-	 * @work: worklist element for death notifications
-	 *        (protected by inner_lock of the proc that
-	 *        this ref belongs to)
-	 */
-	struct binder_work work;
-	binder_uintptr_t cookie;
-};
-
-/**
- * struct binder_ref_data - binder_ref counts and id
- * @debug_id:        unique ID for the ref
- * @desc:            unique userspace handle for ref
- * @strong:          strong ref count (debugging only if not locked)
- * @weak:            weak ref count (debugging only if not locked)
- *
- * Structure to hold ref count and ref id information. Since
- * the actual ref can only be accessed with a lock, this structure
- * is used to return information about the ref to callers of
- * ref inc/dec functions.
- */
-struct binder_ref_data {
-	int debug_id;
-	uint32_t desc;
-	int strong;
-	int weak;
-};
-
-/**
- * struct binder_ref - struct to track references on nodes
- * @data:        binder_ref_data containing id, handle, and current refcounts
- * @rb_node_desc: node for lookup by @data.desc in proc's rb_tree
- * @rb_node_node: node for lookup by @node in proc's rb_tree
- * @node_entry:  list entry for node->refs list in target node
- *               (protected by @node->lock)
- * @proc:        binder_proc containing ref
- * @node:        binder_node of target node. When cleaning up a
- *               ref for deletion in binder_cleanup_ref, a non-NULL
- *               @node indicates the node must be freed
- * @death:       pointer to death notification (ref_death) if requested
- *               (protected by @node->lock)
- *
- * Structure to track references from procA to target node (on procB). This
- * structure is unsafe to access without holding @proc->outer_lock.
- */
-struct binder_ref {
-	/* Lookups needed: */
-	/*   node + proc => ref (transaction) */
-	/*   desc + proc => ref (transaction, inc/dec ref) */
-	/*   node => refs + procs (proc exit) */
-	struct binder_ref_data data;
-	struct rb_node rb_node_desc;
-	struct rb_node rb_node_node;
-	struct hlist_node node_entry;
-	struct binder_proc *proc;
-	struct binder_node *node;
-	struct binder_ref_death *death;
-};
+#else
+static inline void binder_stats_deleted(enum binder_stat_types type) {}
+static inline void binder_stats_created(enum binder_stat_types type) {}
+#endif
 
 enum binder_deferred_state {
-	BINDER_DEFERRED_PUT_FILES    = 0x01,
-	BINDER_DEFERRED_FLUSH        = 0x02,
-	BINDER_DEFERRED_RELEASE      = 0x04,
-};
-
-/**
- * struct binder_priority - scheduler policy and priority
- * @sched_policy            scheduler policy
- * @prio                    [100..139] for SCHED_NORMAL, [0..99] for FIFO/RT
- *
- * The binder driver supports inheriting the following scheduler policies:
- * SCHED_NORMAL
- * SCHED_BATCH
- * SCHED_FIFO
- * SCHED_RR
- */
-struct binder_priority {
-	unsigned int sched_policy;
-	int prio;
-};
-
-/**
- * struct binder_proc - binder process bookkeeping
- * @proc_node:            element for binder_procs list
- * @threads:              rbtree of binder_threads in this proc
- *                        (protected by @inner_lock)
- * @nodes:                rbtree of binder nodes associated with
- *                        this proc ordered by node->ptr
- *                        (protected by @inner_lock)
- * @refs_by_desc:         rbtree of refs ordered by ref->desc
- *                        (protected by @outer_lock)
- * @refs_by_node:         rbtree of refs ordered by ref->node
- *                        (protected by @outer_lock)
- * @waiting_threads:      threads currently waiting for proc work
- *                        (protected by @inner_lock)
- * @pid                   PID of group_leader of process
- *                        (invariant after initialized)
- * @tsk                   task_struct for group_leader of process
- *                        (invariant after initialized)
- * @files                 files_struct for process
- *                        (protected by @files_lock)
- * @files_lock            mutex to protect @files
- * @cred                  struct cred associated with the `struct file`
- *                        in binder_open()
- *                        (invariant after initialized)
- * @deferred_work_node:   element for binder_deferred_list
- *                        (protected by binder_deferred_lock)
- * @deferred_work:        bitmap of deferred work to perform
- *                        (protected by binder_deferred_lock)
- * @outstanding_txns:     number of transactions to be transmitted before
- *                        processes in freeze_wait are woken up
- *                        (protected by @inner_lock)
- * @is_dead:              process is dead and awaiting free
- *                        when outstanding transactions are cleaned up
- *                        (protected by @inner_lock)
- * @is_frozen:            process is frozen and unable to service
- *                        binder transactions
- *                        (protected by @inner_lock)
- * @sync_recv:            process received sync transactions since last frozen
- *                        (protected by @inner_lock)
- *                        bit 0: received sync transaction after being frozen
- *                        bit 1: new pending sync transaction during freezing
- * @async_recv:           process received async transactions since last frozen
- *                        (protected by @inner_lock)
- * @freeze_wait:          waitqueue of processes waiting for all outstanding
- *                        transactions to be processed
- *                        (protected by @inner_lock)
- * @dmap                  dbitmap to manage available reference descriptors
- *                        (protected by @outer_lock)
- * @todo:                 list of work for this process
- *                        (protected by @inner_lock)
- * @stats:                per-process binder statistics
- *                        (atomics, no lock needed)
- * @delivered_death:      list of delivered death notification
- *                        (protected by @inner_lock)
- * @max_threads:          cap on number of binder threads
- *                        (protected by @inner_lock)
- * @requested_threads:    number of binder threads requested but not
- *                        yet started. In current implementation, can
- *                        only be 0 or 1.
- *                        (protected by @inner_lock)
- * @requested_threads_started: number binder threads started
- *                        (protected by @inner_lock)
- * @tmp_ref:              temporary reference to indicate proc is in use
- *                        (protected by @inner_lock)
- * @default_priority:     default scheduler priority
- *                        (invariant after initialized)
- * @debugfs_entry:        debugfs node
- * @alloc:                binder allocator bookkeeping
- * @context:              binder_context for this proc
- *                        (invariant after initialized)
- * @inner_lock:           can nest under outer_lock and/or node lock
- * @outer_lock:           no nesting under innor or node lock
- *                        Lock order: 1) outer, 2) node, 3) inner
- * @binderfs_entry:       process-specific binderfs log file
- * @oneway_spam_detection_enabled: process enabled oneway spam detection
- *                        or not
- *
- * Bookkeeping structure for binder processes
- */
-struct binder_proc {
-	struct hlist_node proc_node;
-	struct rb_root threads;
-	struct rb_root nodes;
-	struct rb_root refs_by_desc;
-	struct rb_root refs_by_node;
-	struct list_head waiting_threads;
-	int pid;
-	struct task_struct *tsk;
-	struct files_struct *files;
-	struct mutex files_lock;
-	const struct cred *cred;
-	struct hlist_node deferred_work_node;
-	int deferred_work;
-	int outstanding_txns;
-	bool is_dead;
-	bool is_frozen;
-	bool sync_recv;
-	bool async_recv;
-	wait_queue_head_t freeze_wait;
-	struct dbitmap dmap;
-	struct list_head todo;
-	struct binder_stats stats;
-	struct list_head delivered_death;
-	u32 max_threads;
-	int requested_threads;
-	int requested_threads_started;
-	int tmp_ref;
-	struct binder_priority default_priority;
-	struct dentry *debugfs_entry;
-	struct binder_alloc alloc;
-	struct binder_context *context;
-	spinlock_t inner_lock;
-	spinlock_t outer_lock;
-	struct dentry *binderfs_entry;
-	bool oneway_spam_detection_enabled;
+	BINDER_DEFERRED_FLUSH        = 0x01,
+	BINDER_DEFERRED_RELEASE      = 0x02,
 };
 
 enum {
@@ -1341,8 +1012,17 @@ static int binder_inc_node_nilocked(struct binder_node *node, int strong,
 	} else {
 		if (!internal)
 			node->local_weak_refs++;
-		if (!node->has_weak_ref && target_list && list_empty(&node->work.entry))
+		if (!node->has_weak_ref && list_empty(&node->work.entry)) {
+			if (target_list == NULL) {
+				pr_err("invalid inc weak node for %d\n",
+					node->debug_id);
+				return -EINVAL;
+			}
+			/*
+			 * See comment above
+			 */
 			binder_enqueue_work_ilocked(&node->work, target_list);
+		}
 	}
 	return 0;
 }
@@ -1529,63 +1209,6 @@ static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 	return NULL;
 }
 
-/* Find the smallest unused descriptor the "slow way" */
-static u32 slow_desc_lookup_olocked(struct binder_proc *proc, u32 offset)
-{
-	struct binder_ref *ref;
-	struct rb_node *n;
-	u32 desc;
-
-	desc = offset;
-	for (n = rb_first(&proc->refs_by_desc); n; n = rb_next(n)) {
-		ref = rb_entry(n, struct binder_ref, rb_node_desc);
-		if (ref->data.desc > desc)
-			break;
-		desc = ref->data.desc + 1;
-	}
-
-	return desc;
-}
-
-/*
- * Find an available reference descriptor ID. The proc->outer_lock might
- * be released in the process, in which case -EAGAIN is returned and the
- * @desc should be considered invalid.
- */
-static int get_ref_desc_olocked(struct binder_proc *proc,
-				struct binder_node *node,
-				u32 *desc)
-{
-	struct dbitmap *dmap = &proc->dmap;
-	unsigned int nbits, offset;
-	unsigned long *new, bit;
-
-	/* 0 is reserved for the context manager */
-	offset = (node == proc->context->binder_context_mgr_node) ? 0 : 1;
-
-	if (!dbitmap_enabled(dmap)) {
-		*desc = slow_desc_lookup_olocked(proc, offset);
-		return 0;
-	}
-
-	if (dbitmap_acquire_next_zero_bit(dmap, offset, &bit) == 0) {
-		*desc = bit;
-		return 0;
-	}
-
-	/*
-	 * The dbitmap is full and needs to grow. The proc->outer_lock
-	 * is briefly released to allocate the new bitmap safely.
-	 */
-	nbits = dbitmap_grow_nbits(dmap);
-	binder_proc_unlock(proc);
-	new = bitmap_zalloc(nbits, GFP_KERNEL);
-	binder_proc_lock(proc);
-	dbitmap_grow(dmap, new, nbits);
-
-	return -EAGAIN;
-}
-
 /**
  * binder_get_ref_for_node_olocked() - get the ref associated with given node
  * @proc:	binder_proc that owns the ref
@@ -1609,14 +1232,12 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 					struct binder_node *node,
 					struct binder_ref *new_ref)
 {
+	struct binder_context *context = proc->context;
+	struct rb_node **p = &proc->refs_by_node.rb_node;
+	struct rb_node *parent = NULL;
 	struct binder_ref *ref;
-	struct rb_node *parent;
-	struct rb_node **p;
-	u32 desc;
+	struct rb_node *n;
 
-retry:
-	p = &proc->refs_by_node.rb_node;
-	parent = NULL;
 	while (*p) {
 		parent = *p;
 		ref = rb_entry(parent, struct binder_ref, rb_node_node);
@@ -1631,10 +1252,6 @@ retry:
 	if (!new_ref)
 		return NULL;
 
-	/* might release the proc->outer_lock */
-	if (get_ref_desc_olocked(proc, node, &desc) == -EAGAIN)
-		goto retry;
-
 	binder_stats_created(BINDER_STAT_REF);
 	new_ref->data.debug_id = atomic_inc_return(&binder_last_id);
 	new_ref->proc = proc;
@@ -1642,7 +1259,14 @@ retry:
 	rb_link_node(&new_ref->rb_node_node, parent, p);
 	rb_insert_color(&new_ref->rb_node_node, &proc->refs_by_node);
 
-	new_ref->data.desc = desc;
+	new_ref->data.desc = (node == context->binder_context_mgr_node) ? 0 : 1;
+	for (n = rb_first(&proc->refs_by_desc); n != NULL; n = rb_next(n)) {
+		ref = rb_entry(n, struct binder_ref, rb_node_desc);
+		if (ref->data.desc > new_ref->data.desc)
+			break;
+		new_ref->data.desc = ref->data.desc + 1;
+	}
+
 	p = &proc->refs_by_desc.rb_node;
 	while (*p) {
 		parent = *p;
@@ -1671,7 +1295,6 @@ retry:
 
 static void binder_cleanup_ref_olocked(struct binder_ref *ref)
 {
-	struct dbitmap *dmap = &ref->proc->dmap;
 	bool delete_node = false;
 
 	binder_debug(BINDER_DEBUG_INTERNAL_REFS,
@@ -1679,8 +1302,6 @@ static void binder_cleanup_ref_olocked(struct binder_ref *ref)
 		      ref->proc->pid, ref->data.debug_id, ref->data.desc,
 		      ref->node->debug_id);
 
-	if (dbitmap_enabled(dmap))
-		dbitmap_clear_bit(dmap, ref->data.desc);
 	rb_erase(&ref->rb_node_desc, &ref->proc->refs_by_desc);
 	rb_erase(&ref->rb_node_node, &ref->proc->refs_by_node);
 
@@ -1842,25 +1463,6 @@ static void binder_free_ref(struct binder_ref *ref)
 	kmem_cache_free(binder_ref_pool, ref);
 }
 
-/* shrink descriptor bitmap if needed */
-static void try_shrink_dmap(struct binder_proc *proc)
-{
-	unsigned long *new;
-	int nbits;
-
-	binder_proc_lock(proc);
-	nbits = dbitmap_shrink_nbits(&proc->dmap);
-	binder_proc_unlock(proc);
-
-	if (!nbits)
-		return;
-
-	new = bitmap_zalloc(nbits, GFP_KERNEL);
-	binder_proc_lock(proc);
-	dbitmap_shrink(&proc->dmap, new, nbits);
-	binder_proc_unlock(proc);
-}
-
 /**
  * binder_update_ref_for_handle() - inc/dec the ref for given handle
  * @proc:	proc containing the ref
@@ -1897,10 +1499,8 @@ static int binder_update_ref_for_handle(struct binder_proc *proc,
 		*rdata = ref->data;
 	binder_proc_unlock(proc);
 
-	if (delete_ref) {
+	if (delete_ref)
 		binder_free_ref(ref);
-		try_shrink_dmap(proc);
-	}
 	return ret;
 
 err_no_ref:
@@ -3365,6 +2965,22 @@ static int binder_proc_transaction(struct binder_transaction *t,
 	binder_inner_proc_unlock(proc);
 	binder_node_unlock(node);
 
+	/*
+	 * To reduce potential contention, free the outdated transaction and
+	 * buffer after releasing the locks.
+	 */
+	if (t_outdated) {
+		struct binder_buffer *buffer = t_outdated->buffer;
+
+		t_outdated->buffer = NULL;
+		buffer->transaction = NULL;
+		trace_binder_transaction_update_buffer_release(buffer);
+		binder_transaction_buffer_release(proc, NULL, buffer, 0, 0);
+		binder_alloc_free_buf(&proc->alloc, buffer);
+		kfree(t_outdated);
+		binder_stats_deleted(BINDER_STAT_TRANSACTION);
+	}
+
 	return 0;
 }
 
@@ -4074,6 +3690,30 @@ static void binder_transaction(struct binder_proc *proc,
 			goto err_bad_object_type;
 		}
 	}
+	/* Done processing objects, copy the rest of the buffer */
+	if (binder_alloc_copy_user_to_buffer(
+				&target_proc->alloc,
+				t->buffer, user_offset,
+				user_buffer + user_offset,
+				tr->data_size - user_offset)) {
+		binder_user_error("%d:%d got transaction with invalid data ptr\n",
+				proc->pid, thread->pid);
+		return_error = BR_FAILED_REPLY;
+		return_error_param = -EFAULT;
+		return_error_line = __LINE__;
+		goto err_copy_data_failed;
+	}
+
+	ret = binder_do_deferred_txn_copies(&target_proc->alloc, t->buffer,
+					    &sgc_head, &pf_head);
+	if (ret) {
+		binder_user_error("%d:%d got transaction with invalid offsets ptr\n",
+				  proc->pid, thread->pid);
+		return_error = BR_FAILED_REPLY;
+		return_error_param = ret;
+		return_error_line = __LINE__;
+		goto err_copy_data_failed;
+	}
 	if (t->buffer->oneway_spam_suspect)
 		tcomplete->type = BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT;
 	else
@@ -4093,7 +3733,12 @@ static void binder_transaction(struct binder_proc *proc,
 		binder_enqueue_thread_work_ilocked(target_thread, &t->work);
 		target_proc->outstanding_txns++;
 		binder_inner_proc_unlock(target_proc);
-
+		if (in_reply_to->is_nested) {
+			spin_lock(&thread->prio_lock);
+			thread->prio_state = BINDER_PRIO_PENDING;
+			thread->prio_next = in_reply_to->saved_priority;
+			spin_unlock(&thread->prio_lock);
+		}
 		wake_up_interruptible_sync(&target_thread->wait);
 		binder_restore_priority(thread, &in_reply_to->saved_priority);
 		binder_free_transaction(in_reply_to);
@@ -4687,7 +4332,7 @@ static int binder_thread_write(struct binder_proc *proc,
 				}
 			}
 			binder_debug(BINDER_DEBUG_DEAD_BINDER,
-				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %p\n",
+				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %pK\n",
 				     proc->pid, thread->pid, (u64)cookie,
 				     death);
 			if (death == NULL) {
@@ -4976,7 +4621,7 @@ retry:
 			else
 				cmd = BR_TRANSACTION_COMPLETE;
 			binder_inner_proc_unlock(proc);
-			kfree(w);
+			kmem_cache_free(binder_work_pool, w);
 			binder_stats_deleted(BINDER_STAT_TRANSACTION_COMPLETE);
 			if (put_user(cmd, (uint32_t __user *)ptr))
 				return -EFAULT;
@@ -5412,8 +5057,7 @@ static void binder_free_proc(struct binder_proc *proc)
 	put_task_struct(proc->tsk);
 	put_cred(eproc->cred);
 	binder_stats_deleted(BINDER_STAT_PROC);
-	dbitmap_free(&proc->dmap);
-	kfree(proc);
+	kmem_cache_free(binder_eproc_pool, eproc);
 }
 
 static void binder_free_thread(struct binder_thread *thread)
@@ -5998,7 +5642,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		uint32_t enable;
 
 		if (copy_from_user(&enable, ubuf, sizeof(enable))) {
-			ret = -EINVAL;
+			ret = -EFAULT;
 			goto err;
 		}
 		binder_inner_proc_lock(proc);
@@ -6101,7 +5745,6 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	proc = &eproc->proc;
 	if (proc == NULL)
 		return -ENOMEM;
-	dbitmap_init(&proc->dmap);
 	spin_lock_init(&proc->inner_lock);
 	spin_lock_init(&proc->outer_lock);
 	get_task_struct(current->group_leader);
@@ -6714,51 +6357,6 @@ static void print_binder_proc(struct seq_file *m,
 	if (!print_all && m->count == header_pos)
 		m->count = start_pos;
 }
-
-static const char * const binder_return_strings[] = {
-	"BR_ERROR",
-	"BR_OK",
-	"BR_TRANSACTION",
-	"BR_REPLY",
-	"BR_ACQUIRE_RESULT",
-	"BR_DEAD_REPLY",
-	"BR_TRANSACTION_COMPLETE",
-	"BR_INCREFS",
-	"BR_ACQUIRE",
-	"BR_RELEASE",
-	"BR_DECREFS",
-	"BR_ATTEMPT_ACQUIRE",
-	"BR_NOOP",
-	"BR_SPAWN_LOOPER",
-	"BR_FINISHED",
-	"BR_DEAD_BINDER",
-	"BR_CLEAR_DEATH_NOTIFICATION_DONE",
-	"BR_FAILED_REPLY",
-	"BR_FROZEN_REPLY",
-	"BR_ONEWAY_SPAM_SUSPECT",
-};
-
-static const char * const binder_command_strings[] = {
-	"BC_TRANSACTION",
-	"BC_REPLY",
-	"BC_ACQUIRE_RESULT",
-	"BC_FREE_BUFFER",
-	"BC_INCREFS",
-	"BC_ACQUIRE",
-	"BC_RELEASE",
-	"BC_DECREFS",
-	"BC_INCREFS_DONE",
-	"BC_ACQUIRE_DONE",
-	"BC_ATTEMPT_ACQUIRE",
-	"BC_REGISTER_LOOPER",
-	"BC_ENTER_LOOPER",
-	"BC_EXIT_LOOPER",
-	"BC_REQUEST_DEATH_NOTIFICATION",
-	"BC_CLEAR_DEATH_NOTIFICATION",
-	"BC_DEAD_BINDER_DONE",
-	"BC_TRANSACTION_SG",
-	"BC_REPLY_SG",
-};
 
 static const char * const binder_objstat_strings[] = {
 	"proc",

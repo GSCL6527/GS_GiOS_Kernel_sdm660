@@ -23,7 +23,6 @@
 #else
 #define SECTION_SIZE_BITS	CONFIG_HOTPLUG_SIZE_BITS
 #endif
-#endif
 #endif /* CONFIG_SPARSEMEM*/
 
 #endif

@@ -1037,13 +1037,6 @@ void fuse_flush_time_update(struct inode *inode)
 	mapping_set_error(inode->i_mapping, err);
 }
 
-void fuse_flush_time_update(struct inode *inode)
-{
-	int err = sync_inode_metadata(inode, 1);
-
-	mapping_set_error(inode->i_mapping, err);
-}
-
 void fuse_update_ctime(struct inode *inode)
 {
 	if (!IS_NOCMTIME(inode)) {

@@ -3585,8 +3585,6 @@ out:
 
 	fuse_flush_time_update(inode);
 
-	fuse_flush_time_update(inode);
-
 	return err;
 }
 

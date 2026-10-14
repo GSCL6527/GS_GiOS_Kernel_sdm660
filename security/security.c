@@ -374,14 +374,6 @@ static int __init enable_debug(char *str)
 }
 __setup("lsm.debug", enable_debug);
 
-/* Enable LSM order debugging. */
-static int __init enable_debug(char *str)
-{
-	debug = true;
-	return 1;
-}
-__setup("lsm.debug", enable_debug);
-
 static bool match_last_lsm(const char *list, const char *lsm)
 {
 	const char *last;

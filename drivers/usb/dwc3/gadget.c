@@ -1145,11 +1145,14 @@ static u32 dwc3_calc_trbs_left(struct dwc3_ep *dep)
 	 * pending to be processed by the driver.
 	 */
 	if (dep->trb_enqueue == dep->trb_dequeue) {
+		struct dwc3_request *req;
+
 		/*
-		 * If there is any request remained in the started_list at
-		 * this point, that means there is no TRB available.
+		 * If there is any request remained in the started_list with
+		 * active TRBs at this point, then there is no TRB available.
 		 */
-		if (!list_empty(&dep->started_list))
+		req = next_request(&dep->started_list);
+		if (req && req->num_trbs)
 			return 0;
 
 		return DWC3_TRB_NUM - 1;
@@ -2308,7 +2311,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 	if (saved_config)
 		dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 
-	dbg_event(0xFF, "run_stop", is_on);
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	if (is_on) {
 		if (dwc->revision <= DWC3_REVISION_187A) {
@@ -2398,82 +2400,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 		return -ETIMEDOUT;
 	}
 
-	return 0;
-}
-
-static int dwc3_gadget_run_stop_util(struct dwc3 *dwc)
-{
-	int ret = 0;
-
-	dev_dbg(dwc->dev, "%s: enter: %d\n", __func__, dwc->gadget_state);
-	switch (dwc->gadget_state) {
-	case DWC3_GADGET_INACTIVE:
-		if (dwc->vbus_active && dwc->softconnect) {
-			ret = dwc3_gadget_run_stop(dwc, true, false);
-			dwc->gadget_state = DWC3_GADGET_ACTIVE;
-			break;
-		}
-
-		if (dwc->vbus_active) {
-			dwc->gadget_state = DWC3_GADGET_CABLE_CONN;
-			break;
-		}
-
-		if (dwc->softconnect) {
-			dwc->gadget_state = DWC3_GADGET_SOFT_CONN;
-			break;
-		}
-	case DWC3_GADGET_SOFT_CONN:
-		if (!dwc->softconnect) {
-			dwc->gadget_state = DWC3_GADGET_INACTIVE;
-			break;
-		}
-
-		if (dwc->vbus_active) {
-			ret = dwc3_gadget_run_stop(dwc, true, false);
-			dwc->gadget_state = DWC3_GADGET_ACTIVE;
-		}
-		break;
-	case DWC3_GADGET_CABLE_CONN:
-		if (!dwc->vbus_active) {
-			dwc->gadget_state = DWC3_GADGET_INACTIVE;
-			break;
-		}
-
-		if (dwc->softconnect) {
-			ret = dwc3_gadget_run_stop(dwc, true, false);
-			dwc->gadget_state = DWC3_GADGET_ACTIVE;
-		}
-		break;
-	case DWC3_GADGET_ACTIVE:
-		if (!dwc->vbus_active) {
-			dwc->gadget_state = DWC3_GADGET_SOFT_CONN;
-			ret = dwc3_gadget_run_stop(dwc, false, false);
-			break;
-		}
-
-		if (!dwc->softconnect) {
-			dwc->gadget_state = DWC3_GADGET_CABLE_CONN;
-			ret = dwc3_gadget_run_stop(dwc, false, false);
-			break;
-		}
-		break;
-	default:
-		dev_err(dwc->dev, "Invalid state\n");
-	}
-
-	dev_dbg(dwc->dev, "%s: exit: %d\n", __func__, dwc->gadget_state);
-	return ret;
-}
-
-static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned int mA)
-{
-	struct dwc3		*dwc = gadget_to_dwc(g);
-
-	dwc->vbus_draw = mA;
-	dev_dbg(dwc->dev, "Notify controller from %s. mA = %u\n", __func__, mA);
-	dbg_event(0xFF, "currentDraw", mA);
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT, 0);
 	return 0;
 }
 
@@ -4597,15 +4523,4 @@ err1:
 
 err0:
 	return ret;
-}
-
-void dwc3_gadget_process_pending_events(struct dwc3 *dwc)
-{
-	if (dwc->pending_events) {
-		dwc3_interrupt(dwc->irq_gadget, dwc->ev_buf);
-		dwc3_thread_interrupt(dwc->irq_gadget, dwc->ev_buf);
-		pm_runtime_put(dwc->dev);
-		dwc->pending_events = false;
-		enable_irq(dwc->irq_gadget);
-	}
 }

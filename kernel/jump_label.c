@@ -98,40 +98,11 @@ int static_key_count(struct static_key *key)
 }
 EXPORT_SYMBOL_GPL(static_key_count);
 
-/*
- * static_key_fast_inc_not_disabled - adds a user for a static key
- * @key: static key that must be already enabled
- *
- * The caller must make sure that the static key can't get disabled while
- * in this function. It doesn't patch jump labels, only adds a user to
- * an already enabled static key.
- *
- * Returns true if the increment was done. Unlike refcount_t the ref counter
- * is not saturated, but will fail to increment on overflow.
- */
-bool static_key_fast_inc_not_disabled(struct static_key *key)
+void static_key_slow_inc_cpuslocked(struct static_key *key)
 {
-	int v;
+	int v, v1;
 
 	STATIC_KEY_CHECK_USE(key);
-	/*
-	 * Negative key->enabled has a special meaning: it sends
-	 * static_key_slow_inc() down the slow path, and it is non-zero
-	 * so it counts as "enabled" in jump_label_update().  Note that
-	 * atomic_inc_unless_negative() checks >= 0, so roll our own.
-	 */
-	v = atomic_read(&key->enabled);
-	do {
-		if (v <= 0 || (v + 1) < 0)
-			return false;
-	} while (!likely(atomic_try_cmpxchg(&key->enabled, &v, v + 1)));
-
-	return true;
-}
-EXPORT_SYMBOL_GPL(static_key_fast_inc_not_disabled);
-
-bool static_key_slow_inc_cpuslocked(struct static_key *key)
-{
 	lockdep_assert_cpus_held();
 
 	/*
@@ -140,9 +111,17 @@ bool static_key_slow_inc_cpuslocked(struct static_key *key)
 	 * jump_label_update() process.  At the same time, however,
 	 * the jump_label_update() call below wants to see
 	 * static_key_enabled(&key) for jumps to be updated properly.
+	 *
+	 * So give a special meaning to negative key->enabled: it sends
+	 * static_key_slow_inc() down the slow path, and it is non-zero
+	 * so it counts as "enabled" in jump_label_update().  Note that
+	 * atomic_inc_unless_negative() checks >= 0, so roll our own.
 	 */
-	if (static_key_fast_inc_not_disabled(key))
-		return true;
+	for (v = atomic_read(&key->enabled); v > 0; v = v1) {
+		v1 = atomic_cmpxchg(&key->enabled, v, v + 1);
+		if (likely(v1 == v))
+			return;
+	}
 
 	jump_label_lock();
 	if (atomic_read(&key->enabled) == 0) {
@@ -154,23 +133,16 @@ bool static_key_slow_inc_cpuslocked(struct static_key *key)
 		 */
 		atomic_set_release(&key->enabled, 1);
 	} else {
-		if (WARN_ON_ONCE(!static_key_fast_inc_not_disabled(key))) {
-			jump_label_unlock();
-			return false;
-		}
+		atomic_inc(&key->enabled);
 	}
 	jump_label_unlock();
-	return true;
 }
 
-bool static_key_slow_inc(struct static_key *key)
+void static_key_slow_inc(struct static_key *key)
 {
-	bool ret;
-
 	cpus_read_lock();
-	ret = static_key_slow_inc_cpuslocked(key);
+	static_key_slow_inc_cpuslocked(key);
 	cpus_read_unlock();
-	return ret;
 }
 EXPORT_SYMBOL_GPL(static_key_slow_inc);
 
@@ -230,13 +202,13 @@ void static_key_disable(struct static_key *key)
 }
 EXPORT_SYMBOL_GPL(static_key_disable);
 
-static bool static_key_slow_try_dec(struct static_key *key)
+static void __static_key_slow_dec_cpuslocked(struct static_key *key,
+					   unsigned long rate_limit,
+					   struct delayed_work *work)
 {
 	int val;
 
-	val = atomic_fetch_add_unless(&key->enabled, -1, 1);
-	if (val == 1)
-		return false;
+	lockdep_assert_cpus_held();
 
 	/*
 	 * The negative count check is valid even when a negative
@@ -245,70 +217,66 @@ static bool static_key_slow_try_dec(struct static_key *key)
 	 * returns is unbalanced, because all other static_key_slow_inc()
 	 * instances block while the update is in progress.
 	 */
-	WARN(val < 0, "jump label: negative count!\n");
-	return true;
-}
-
-static void __static_key_slow_dec_cpuslocked(struct static_key *key)
-{
-	lockdep_assert_cpus_held();
-
-	if (static_key_slow_try_dec(key))
+	val = atomic_fetch_add_unless(&key->enabled, -1, 1);
+	if (val != 1) {
+		WARN(val < 0, "jump label: negative count!\n");
 		return;
+	}
 
 	jump_label_lock();
-	if (atomic_dec_and_test(&key->enabled))
-		jump_label_update(key);
+	if (atomic_dec_and_test(&key->enabled)) {
+		if (rate_limit) {
+			atomic_inc(&key->enabled);
+			schedule_delayed_work(work, rate_limit);
+		} else {
+			jump_label_update(key);
+		}
+	}
 	jump_label_unlock();
 }
 
-static void __static_key_slow_dec(struct static_key *key)
+static void __static_key_slow_dec(struct static_key *key,
+				  unsigned long rate_limit,
+				  struct delayed_work *work)
 {
 	cpus_read_lock();
-	__static_key_slow_dec_cpuslocked(key);
+	__static_key_slow_dec_cpuslocked(key, rate_limit, work);
 	cpus_read_unlock();
 }
 
-void jump_label_update_timeout(struct work_struct *work)
+static void jump_label_update_timeout(struct work_struct *work)
 {
 	struct static_key_deferred *key =
 		container_of(work, struct static_key_deferred, work.work);
-	__static_key_slow_dec(&key->key);
+	__static_key_slow_dec(&key->key, 0, NULL);
 }
-EXPORT_SYMBOL_GPL(jump_label_update_timeout);
 
 void static_key_slow_dec(struct static_key *key)
 {
 	STATIC_KEY_CHECK_USE(key);
-	__static_key_slow_dec(key);
+	__static_key_slow_dec(key, 0, NULL);
 }
 EXPORT_SYMBOL_GPL(static_key_slow_dec);
 
 void static_key_slow_dec_cpuslocked(struct static_key *key)
 {
 	STATIC_KEY_CHECK_USE(key);
-	__static_key_slow_dec_cpuslocked(key);
+	__static_key_slow_dec_cpuslocked(key, 0, NULL);
 }
 
-void __static_key_slow_dec_deferred(struct static_key *key,
-				    struct delayed_work *work,
-				    unsigned long timeout)
+void static_key_slow_dec_deferred(struct static_key_deferred *key)
 {
 	STATIC_KEY_CHECK_USE(key);
-
-	if (static_key_slow_try_dec(key))
-		return;
-
-	schedule_delayed_work(work, timeout);
+	__static_key_slow_dec(&key->key, key->timeout, &key->work);
 }
-EXPORT_SYMBOL_GPL(__static_key_slow_dec_deferred);
+EXPORT_SYMBOL_GPL(static_key_slow_dec_deferred);
 
-void __static_key_deferred_flush(void *key, struct delayed_work *work)
+void static_key_deferred_flush(struct static_key_deferred *key)
 {
 	STATIC_KEY_CHECK_USE(key);
-	flush_delayed_work(work);
+	flush_delayed_work(&key->work);
 }
-EXPORT_SYMBOL_GPL(__static_key_deferred_flush);
+EXPORT_SYMBOL_GPL(static_key_deferred_flush);
 
 void jump_label_rate_limit(struct static_key_deferred *key,
 		unsigned long rl)
@@ -329,16 +297,14 @@ static int addr_conflict(struct jump_entry *entry, void *start, void *end)
 }
 
 static int __jump_label_text_reserved(struct jump_entry *iter_start,
-		struct jump_entry *iter_stop, void *start, void *end, bool init)
+		struct jump_entry *iter_stop, void *start, void *end)
 {
 	struct jump_entry *iter;
 
 	iter = iter_start;
 	while (iter < iter_stop) {
-		if (init || !jump_entry_is_init(iter)) {
-			if (addr_conflict(iter, start, end))
-				return 1;
-		}
+		if (addr_conflict(iter, start, end))
+			return 1;
 		iter++;
 	}
 
@@ -441,28 +407,6 @@ static void __jump_label_update(struct static_key *key,
 			arch_jump_label_transform(entry, jump_label_type(entry));
 	}
 }
-#else
-static void __jump_label_update(struct static_key *key,
-				struct jump_entry *entry,
-				struct jump_entry *stop,
-				bool init)
-{
-	for (; (entry < stop) && (jump_entry_key(entry) == key); entry++) {
-
-		if (!jump_label_can_update(entry, init))
-			continue;
-
-		if (!arch_jump_label_transform_queue(entry, jump_label_type(entry))) {
-			/*
-			 * Queue is full: Apply the current queue and try again.
-			 */
-			arch_jump_label_transform_apply();
-			BUG_ON(!arch_jump_label_transform_queue(entry, jump_label_type(entry)));
-		}
-	}
-	arch_jump_label_transform_apply();
-}
-#endif
 
 void __init jump_label_init(void)
 {
@@ -529,7 +473,7 @@ struct static_key_mod {
 
 static inline struct static_key_mod *static_key_mod(struct static_key *key)
 {
-	WARN_ON_ONCE(!static_key_linked(key));
+	WARN_ON_ONCE(!(key->type & JUMP_TYPE_LINKED));
 	return (struct static_key_mod *)(key->type & ~JUMP_TYPE_MASK);
 }
 
@@ -553,25 +497,19 @@ static void static_key_set_mod(struct static_key *key,
 static int __jump_label_mod_text_reserved(void *start, void *end)
 {
 	struct module *mod;
-	int ret;
 
 	preempt_disable();
 	mod = __module_text_address((unsigned long)start);
 	WARN_ON_ONCE(__module_text_address((unsigned long)end) != mod);
-	if (!try_module_get(mod))
-		mod = NULL;
 	preempt_enable();
 
 	if (!mod)
 		return 0;
 
-	ret = __jump_label_text_reserved(mod->jump_entries,
+
+	return __jump_label_text_reserved(mod->jump_entries,
 				mod->jump_entries + mod->num_jump_entries,
-				start, end, mod->state == MODULE_STATE_COMING);
-
-	module_put(mod);
-
-	return ret;
+				start, end);
 }
 
 static void __jump_label_mod_update(struct static_key *key)
@@ -792,9 +730,8 @@ early_initcall(jump_label_init_module);
  */
 int jump_label_text_reserved(void *start, void *end)
 {
-	bool init = system_state < SYSTEM_RUNNING;
 	int ret = __jump_label_text_reserved(__start___jump_table,
-			__stop___jump_table, start, end, init);
+			__stop___jump_table, start, end);
 
 	if (ret)
 		return ret;

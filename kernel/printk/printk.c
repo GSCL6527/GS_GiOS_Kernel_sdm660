@@ -828,11 +828,6 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 		}
 	}
 
-	if (strstr(line, "healthd") || strstr(line, "logd") ||
-	    strstr(line, "DM_DEV_STATUS") || strstr(line, "Untracked pid") ||
-	    strstr(line, "usb_gadget"))
-		return len;
-
 	printk_emit(facility, level, NULL, 0, "%s", line);
 	return ret;
 }
@@ -1727,6 +1722,9 @@ static int console_trylock_spinning(void)
 	 */
 	mutex_acquire(&console_lock_dep_map, 0, 1, _THIS_IP_);
 
+	/* The previous owner may have been allowed to schedule. */
+	console_may_schedule = 0;
+
 	return 1;
 }
 
@@ -2230,7 +2228,7 @@ void suspend_console(void)
 {
 	if (!console_suspend_enabled)
 		return;
-
+	pr_info("Suspending console(s) (use no_console_suspend to debug)\n");
 	console_lock();
 	console_suspended = 1;
 	up_console_sem();

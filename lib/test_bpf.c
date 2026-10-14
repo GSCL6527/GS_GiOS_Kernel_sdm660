@@ -463,6 +463,79 @@ static int bpf_fill_stxdw(struct bpf_test *self)
 
 static struct bpf_test tests[] = {
 	{
+		"INT: JMP32 immediate ignores upper bits",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x100000001ULL),
+			BPF_JMP32_IMM(BPF_JEQ, R1, 1, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 register ignores upper bits",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x100000001ULL),
+			BPF_MOV64_IMM(R2, 1),
+			BPF_JMP32_REG(BPF_JEQ, R1, R2, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 signed immediate",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x1ffffffffULL),
+			BPF_JMP32_IMM(BPF_JSLT, R1, 0, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 signed register",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x1ffffffffULL),
+			BPF_MOV64_IMM(R2, 0),
+			BPF_JMP32_REG(BPF_JSLT, R1, R2, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 JSET ignores upper bits",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x100000000ULL),
+			BPF_LD_IMM64(R2, 0x100000000ULL),
+			BPF_JMP32_REG(BPF_JSET, R1, R2, 2),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
 		"TAX",
 		.u.insns = {
 			BPF_STMT(BPF_LD | BPF_IMM, 1),

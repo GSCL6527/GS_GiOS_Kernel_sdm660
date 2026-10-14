@@ -2652,7 +2652,6 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 		return;
 	}
 #endif
-#endif
 
 	rq_lock(rq, &rf);
 	update_rq_clock(rq);

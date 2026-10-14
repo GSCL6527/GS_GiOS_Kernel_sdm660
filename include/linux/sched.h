@@ -929,7 +929,7 @@ struct task_struct {
 #ifdef CONFIG_TASKS_TRACE_RCU
 	int				trc_reader_nesting;
 	int				trc_ipi_to_cpu;
-	bool				trc_reader_need_end;
+	union rcu_special		trc_reader_special;
 	bool				trc_reader_checked;
 	struct list_head		trc_holdout_list;
 #endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
@@ -1728,6 +1728,9 @@ extern struct pid *cad_pid;
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
 #define PF_WAKE_UP_IDLE         0x10000000	/* TTWU on an idle CPU */
+#ifdef CONFIG_SONY_SCHED
+#define PF_MIGRATE_CUM_ADJ_TASK	0x20000000	/* Cumulative task adjustment should be done */
+#else
 #define PF_MUTEX_TESTER		0x20000000	/* Thread belongs to the rt mutex tester */
 #endif
 #define PF_FREEZER_SKIP		0x40000000	/* Freezer should not count it as freezable */

@@ -176,7 +176,6 @@ static int cpufreq_thermal_notifier(struct notifier_block *nb,
 			cpufreq_verify_within_limits(policy, floor_freq,
 							clipped_freq);
 		break;
-#endif
 	}
 
 	mutex_unlock(&cooling_list_lock);

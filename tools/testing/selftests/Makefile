@@ -27,6 +27,7 @@ TARGETS += net
 TARGETS += netfilter
 TARGETS += nsfs
 TARGETS += powerpc
+TARGETS += printk
 TARGETS += proc
 TARGETS += pstore
 TARGETS += ptrace

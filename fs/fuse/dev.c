@@ -22,7 +22,6 @@
 #include <linux/swap.h>
 #include <linux/splice.h>
 #include <linux/sched.h>
-#include <linux/freezer.h>
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
@@ -416,11 +415,9 @@ static void request_wait_answer(struct fuse_req *req)
 
 	/*
 	 * Either request is already in userspace, or it was forced.
-	 * Wait half of freeze_timeout_msecs to avoid getting stuck.
+	 * Wait it out.
 	 */
-	while (!test_bit(FR_FINISHED, &req->flags))
-		wait_event_freezable_timeout(req->waitq,
-			test_bit(FR_FINISHED, &req->flags), freeze_timeout_msecs / 2);
+	wait_event(req->waitq, test_bit(FR_FINISHED, &req->flags));
 }
 
 static void __fuse_request_send(struct fuse_req *req)
@@ -800,6 +797,7 @@ static int fuse_check_page(struct page *page)
 	       1 << PG_uptodate |
 	       1 << PG_lru |
 	       1 << PG_active |
+	       1 << PG_workingset |
 	       1 << PG_reclaim |
 	       1 << PG_waiters))) {
 		dump_page(page, "fuse: trying to steal weird page");
@@ -1643,9 +1641,11 @@ static int fuse_notify_store(struct fuse_conn *fc, unsigned int size,
 
 		this_num = min_t(unsigned, num, PAGE_SIZE - offset);
 		err = fuse_copy_page(cs, &page, offset, this_num, 0);
-		if (!err && offset == 0 &&
-		    (this_num == PAGE_SIZE || file_size == end))
+		if (!PageUptodate(page) && !err && offset == 0 &&
+		    (this_num == PAGE_SIZE || file_size == end)) {
+			zero_user_segment(page, this_num, PAGE_SIZE);
 			SetPageUptodate(page);
+		}
 		unlock_page(page);
 		put_page(page);
 
