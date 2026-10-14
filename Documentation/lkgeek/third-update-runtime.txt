@@ -1,0 +1,36 @@
+ARM64 QEMU runtime regression: 2026-10-15
+PASS: ARM64 JMP32 execution and JIT
+PASS: ARM64 register JMP32 execution
+PASS: ARM64 JSET ignores upper bits
+PASS: ARM64 signed JMP32 execution
+PASS: JMP32 immediate JEQ
+PASS: JMP32 register JEQ
+PASS: JMP32 immediate JGT
+PASS: JMP32 register JGT
+PASS: JMP32 immediate JLT
+PASS: JMP32 register JLT
+PASS: JMP32 immediate JGE
+PASS: JMP32 register JGE
+PASS: JMP32 immediate JLE
+PASS: JMP32 register JLE
+PASS: JMP32 immediate JNE
+PASS: JMP32 register JNE
+PASS: JMP32 immediate JSGT
+PASS: JMP32 register JSGT
+PASS: JMP32 immediate JSLT
+PASS: JMP32 register JSLT
+PASS: JMP32 immediate JSGE
+PASS: JMP32 register JSGE
+PASS: JMP32 immediate JSLE
+PASS: JMP32 register JSLE
+PASS: JMP32 immediate JSET
+PASS: JMP32 register JSET
+PASS: BPF-to-BPF extra JIT pass
+PASS: ktime_get_boot_ns helper
+PASS: BPF array update and lookup
+PASS: BPF ring buffer creation
+PASS: BPF ring buffer reserve/discard
+PASS: BTF integer validation and load
+PASS: cgroup BPF attach/query/detach
+PASS: all five formerly filtered kmsg messages
+THIRD_UPDATE_RUNTIME_PASS

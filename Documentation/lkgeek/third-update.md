@@ -29,7 +29,9 @@ with adapters for retained local consumers. Source device trees were imported.
   operands; resolve BPF-to-BPF addresses on the extra JIT pass. Keep the local
   modulo instruction optimization. Enable JIT without requiring loadable modules.
 - Reconcile memory reclaim, rmap, compaction, vmalloc, VM fault, RCU task fields,
-  file descriptor helpers, Binder logging and networking interfaces.
+  file descriptor helpers, Binder logging and networking interfaces. Restore
+  SELinux socket security allocation/free to match the imported pointer-based
+  network stack; runtime testing caught the previous embedded-storage mismatch.
 - Restore KernelSU and Kprofiles build registration and vmlinux object exports;
   correct audio header symlinks and libfdt implementation/header mismatches.
 - Force the ARM64 global stack protector guard. Android-target Clang otherwise
@@ -65,18 +67,25 @@ subsequent builds repair discovered compilation/runtime failures.
 For the QEMU validation configuration, copy the production output to a separate
 output directory and enable `ARCH_VEXPRESS`, `SERIAL_AMBA_PL011`,
 `SERIAL_AMBA_PL011_CONSOLE`, `DEVTMPFS`, `DEVTMPFS_MOUNT`, `POWER_RESET`,
-`POWER_RESET_SYSCON`, `GPIO_PL061`; run `olddefconfig` and build `Image.gz` with the
-same toolchain. BPF/JIT, KernelSU and the production subsystems remain enabled.
+`POWER_RESET_SYSCON`, `GPIO_PL061`; disable `QCOM_EARLY_RANDOM` (the virtual
+machine has no Qualcomm TrustZone PRNG); run `olddefconfig` and build `Image.gz`
+with the same toolchain. BPF/JIT, KernelSU and the production subsystems remain enabled.
 Install ARM64 UAPI headers with `headers_install`, then run:
 
 ```sh
-CC=clang QEMU=qemu-system-aarch64 \
+CC=clang QEMU=qemu-system-aarch64 DTC=/path/to/build/scripts/dtc/dtc \
   tools/testing/selftests/bpf/run_third_update_vm.sh \
   /path/to/vm-build/arch/arm64/boot/Image /path/to/uapi/include /path/to/results
 ```
 
+The runner flattens recent QEMU's socket wrapper in its generated CPU topology
+for the 4.19 parser and skips `qtee_shmbridge_init`, which requires Qualcomm
+TrustZone. These are VM-only adjustments; Wayne configuration and device trees
+retain their hardware services.
+
 The freestanding init requires no userspace libraries. It checks actual JIT code
-presence and packet-driven JMP32 results, subprogram calls, the boot-time helper,
+presence and all 22 JMP32 comparison forms with packet-driven values, subprogram
+calls, the boot-time helper,
 array map operations, ring buffer reserve/discard, BTF loading, cgroup attachment,
 and round-trip delivery of all five formerly filtered log messages. Additional
 JMP32 cases are registered in `lib/test_bpf.c`. The standalone printk selftest can
@@ -88,8 +97,12 @@ Production `Image.gz` and Wayne/Jasmine device trees compiled successfully befor
 the runtime test identified the Clang guard problem. ARM64 UAPI `headers_install`,
 `gzip -t`, Wayne device-tree decompilation and `git diff --check` passed. The native
 printk test compiled and skipped execution because this host has no `/dev/kmsg`.
-The guard correction is undergoing final rebuild and QEMU runtime verification;
-this section will be updated with the final results before completion.
+The corrected VM booted to userspace and all 34 runtime assertions passed
+(`THIRD_UPDATE_RUNTIME_PASS`), including all five log messages. The VM emits
+Qualcomm socinfo/camera warnings because those devices are absent; it reports no
+panic during the successful regression run. Production rebuild after the guard
+correction is running; it must then incorporate the runtime-discovered SELinux
+fix before this integration is complete.
 
 No physical Wayne device is connected. QEMU cannot validate Qualcomm drivers,
 Android boot, modem, camera, audio, suspend, charging or device-specific behavior.
