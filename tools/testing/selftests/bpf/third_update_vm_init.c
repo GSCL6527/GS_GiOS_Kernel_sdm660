@@ -103,7 +103,8 @@ static int run(const struct bpf_insn *insns, unsigned int count,
 
 static void test_bpf(void)
 {
-	unsigned char packet[64] = { 0, 0, 0, 1 };
+	/* Socket-filter TEST_RUN strips the 14-byte Ethernet header. */
+	unsigned char packet[64] = { [17] = 1 };
 	union bpf_attr a = {};
 	unsigned int key = 0, value = 42, result = 0;
 	long fd, ret;
@@ -131,7 +132,7 @@ static void test_bpf(void)
 	check("ARM64 register JMP32 execution", run(jump, COUNT(jump), 1, packet));
 	jump[6] = BPF_JMP32_REG(BPF_JSET, BPF_REG_1, BPF_REG_2, 2);
 	check("ARM64 JSET ignores upper bits", run(jump, COUNT(jump), 0, packet));
-	packet[0] = packet[1] = packet[2] = packet[3] = 255;
+	packet[14] = packet[15] = packet[16] = packet[17] = 255;
 	jump[6] = BPF_JMP32_IMM(BPF_JSLT, BPF_REG_1, 0, 2);
 	check("ARM64 signed JMP32 execution", run(jump, COUNT(jump), 1, packet));
 	{
