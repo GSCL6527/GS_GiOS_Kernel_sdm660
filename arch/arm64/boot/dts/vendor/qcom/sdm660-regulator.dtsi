@@ -185,8 +185,6 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <1370000>;
-			/* Force NPM follows HW_EN1 */
-			qcom,init-pin-ctrl-mode = <2>;
 			/* Enable follows HW_EN1 */
 			qcom,enable-with-pin-ctrl = <0 2>;
 		};
@@ -224,8 +222,6 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <1750000>;
 			regulator-max-microvolt = <1900000>;
-			/* Force NPM follows HW_EN1 */
-			qcom,init-pin-ctrl-mode = <2>;
 			/* Enable follows HW_EN1 */
 			qcom,enable-with-pin-ctrl = <0 2>;
 		};
@@ -311,8 +307,6 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3200000>;
 			regulator-max-microvolt = <3400000>;
-			/* Force NPM follows HW_EN1 */
-			qcom,init-pin-ctrl-mode = <2>;
 			/* Enable follows HW_EN1 */
 			qcom,enable-with-pin-ctrl = <0 2>;
 		};
@@ -601,7 +595,7 @@
 
 				qcom,corner-frequencies =
 					<160000000 266000000 370000000
-					 465000000 585000000 647000000
+					 465000000 588000000 647000000
 					 750000000>;
 
 				qcom,cpr-target-quotients =
@@ -754,7 +748,7 @@
 					/* Speed bin 3 */
 					<300000000  633600000  902400000
 					1113600000 1401600000 1536000000
-					1747200000 1843200000>,
+					1612800000 1843200000>,
 
 					/* Speed bin 4 */
 					<300000000  633600000  902400000
@@ -904,7 +898,7 @@
 
 					/* Speed bin 3 */
 					<300000000  1113600000 1401600000
-					 1747200000 1958400000 2150400000
+					 1747200000 1804800000 2150400000
 					 2208000000>,
 
 					/* Speed bin 4 */

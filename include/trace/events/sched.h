@@ -101,6 +101,54 @@ TRACE_EVENT(sched_enq_deq_task,
 );
 
 /*
+ * Tracepoint for task enqueue/dequeue:
+ */
+TRACE_EVENT(sched_enq_deq_task,
+
+	TP_PROTO(struct task_struct *p, bool enqueue,
+				unsigned int cpus_allowed),
+
+	TP_ARGS(p, enqueue, cpus_allowed),
+
+	TP_STRUCT__entry(
+		__array(char,		comm, TASK_COMM_LEN)
+		__field(pid_t,		pid)
+		__field(int,		prio)
+		__field(int,		cpu)
+		__field(bool,		enqueue)
+		__field(unsigned int,	nr_running)
+		__field(unsigned long,	cpu_load)
+		__field(unsigned int,	rt_nr_running)
+		__field(unsigned int,	cpus_allowed)
+		__field(unsigned int,	demand)
+		__field(unsigned int,	pred_demand)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid		= p->pid;
+		__entry->prio		= p->prio;
+		__entry->cpu		= task_cpu(p);
+		__entry->enqueue	= enqueue;
+		__entry->nr_running	= task_rq(p)->nr_running;
+		__entry->cpu_load	= task_rq(p)->cpu_load[0];
+		__entry->rt_nr_running	= task_rq(p)->rt.rt_nr_running;
+		__entry->cpus_allowed	= cpus_allowed;
+		__entry->demand		= task_load(p);
+		__entry->pred_demand	= task_pl(p);
+	),
+
+	TP_printk("cpu=%d %s comm=%s pid=%d prio=%d nr_running=%u cpu_load=%lu rt_nr_running=%u affine=%x demand=%u pred_demand=%u",
+			__entry->cpu,
+			__entry->enqueue ? "enqueue" : "dequeue",
+			__entry->comm, __entry->pid,
+			__entry->prio, __entry->nr_running,
+			__entry->cpu_load, __entry->rt_nr_running,
+			__entry->cpus_allowed, __entry->demand,
+			__entry->pred_demand)
+);
+
+/*
  * Tracepoint for waking up a task:
  */
 DECLARE_EVENT_CLASS(sched_wakeup_template,
@@ -1258,7 +1306,7 @@ TRACE_EVENT(sched_compute_energy,
 		__entry->best_energy	        = best_energy;
 	),
 
-	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d prev_energy=%lu eval_cpu=%d eval_energy=%lu best_energy_cpu=%d best_energy=%lu",
+	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d prev_energy=%llu eval_cpu=%d eval_energy=%llu best_energy_cpu=%d best_energy=%llu",
 		__entry->pid, __entry->comm, __entry->util, __entry->prev_cpu,
 		__entry->prev_energy, __entry->eval_cpu, __entry->eval_energy,
 		__entry->best_energy_cpu, __entry->best_energy)
@@ -1410,35 +1458,23 @@ TRACE_EVENT(sched_boost_cpu,
 
 TRACE_EVENT(core_ctl_eval_need,
 
-	TP_PROTO(unsigned int cpu, unsigned int last_need,
-		unsigned int new_need, unsigned int active_cpus,
-		unsigned int adj_now, unsigned int adj_possible,
-		unsigned int updated, s64 need_ts),
-	TP_ARGS(cpu, last_need, new_need, active_cpus, adj_now, adj_possible, updated, need_ts),
+	TP_PROTO(unsigned int cpu, unsigned int old_need,
+		unsigned int new_need, unsigned int updated),
+	TP_ARGS(cpu, old_need, new_need, updated),
 	TP_STRUCT__entry(
 		__field(u32, cpu)
-		__field(u32, last_need)
+		__field(u32, old_need)
 		__field(u32, new_need)
-		__field(u32, active_cpus)
-		__field(u32, adj_now)
-		__field(u32, adj_possible)
 		__field(u32, updated)
-		__field(s64, need_ts)
 	),
 	TP_fast_assign(
-		__entry->cpu		= cpu;
-		__entry->last_need	= last_need;
-		__entry->new_need	= new_need;
-		__entry->active_cpus	= active_cpus;
-		__entry->adj_now	= adj_now;
-		__entry->adj_possible	= adj_possible;
-		__entry->updated	= updated;
-		__entry->need_ts	= need_ts;
+		__entry->cpu = cpu;
+		__entry->old_need = old_need;
+		__entry->new_need = new_need;
+		__entry->updated = updated;
 	),
-	TP_printk("cpu=%u last_need=%u new_need=%u active_cpus=%u adj_now=%u adj_possible=%u updated=%u need_ts=%llu",
-		  __entry->cpu,	__entry->last_need, __entry->new_need,
-		  __entry->active_cpus, __entry->adj_now, __entry->adj_possible,
-		  __entry->updated, __entry->need_ts)
+	TP_printk("cpu=%u, old_need=%u, new_need=%u, updated=%u", __entry->cpu,
+			__entry->old_need, __entry->new_need, __entry->updated)
 );
 
 TRACE_EVENT(core_ctl_set_busy,
@@ -1657,28 +1693,6 @@ TRACE_EVENT_CONDITION(sched_overutilized,
 
 	TP_printk("overutilized=%d sd_span=%s",
 		__entry->overutilized ? 1 : 0, __entry->cpulist)
-);
-
-TRACE_EVENT(sched_capacity_update,
-
-	TP_PROTO(int cpu),
-
-	TP_ARGS(cpu),
-
-	TP_STRUCT__entry(
-		__field(unsigned int, cpu)
-		__field(unsigned int, capacity)
-		__field(unsigned int, capacity_orig)
-	),
-
-	TP_fast_assign(
-		__entry->cpu			= cpu;
-		__entry->capacity		= capacity_of(cpu);
-		__entry->capacity_orig		= capacity_orig_of(cpu);
-	),
-
-	TP_printk("cpu=%d capacity=%u capacity_orig=%u",
-		__entry->cpu, __entry->capacity, __entry->capacity_orig)
 );
 
 /*

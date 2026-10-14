@@ -128,6 +128,14 @@ static int mdss_pll_resource_parse(struct platform_device *pdev,
 		pll_res->pll_interface_type = MDSS_DP_PLL_14NM;
 		pll_res->target_id = MDSS_PLL_TARGET_SDM660;
 		pll_res->revision = 2;
+	} else if (!strcmp(compatible_stream, "qcom,mdss_dsi_pll_sdm630")) {
+		pll_res->pll_interface_type = MDSS_DSI_PLL_14NM;
+		pll_res->target_id = MDSS_PLL_TARGET_SDM630;
+		pll_res->revision = 2;
+	} else if (!strcmp(compatible_stream, "qcom,mdss_dp_pll_sdm630")) {
+		pll_res->pll_interface_type = MDSS_DP_PLL_14NM;
+		pll_res->target_id = MDSS_PLL_TARGET_SDM630;
+		pll_res->revision = 2;
 	} else if (!strcmp(compatible_stream, "qcom,mdss_dsi_pll_12nm"))
 		pll_res->pll_interface_type = MDSS_DSI_PLL_12NM;
 	else if (!strcmp(compatible_stream, "qcom,mdss_dsi_pll_28lpm"))
@@ -154,24 +162,18 @@ static int mdss_pll_clock_register(struct platform_device *pdev,
 	}
 
 	switch (pll_res->pll_interface_type) {
-#ifdef CONFIG_MDSS_PLL_14NM
 	case MDSS_DSI_PLL_14NM:
 		rc = dsi_pll_clock_register_14nm(pdev, pll_res);
 		break;
 	case MDSS_DP_PLL_14NM:
 		rc = dp_pll_clock_register_14nm(pdev, pll_res);
 		break;
-#endif
-#ifdef CONFIG_MDSS_PLL_28NM
 	case MDSS_DSI_PLL_28LPM:
 		rc = dsi_pll_clock_register_28lpm(pdev, pll_res);
 		break;
-#endif
-#ifdef CONFIG_MDSS_PLL_12NM
 	case MDSS_DSI_PLL_12NM:
 		rc = dsi_pll_clock_register_12nm(pdev, pll_res);
 		break;
-#endif
 	case MDSS_UNKNOWN_PLL:
 	default:
 		rc = -EINVAL;
@@ -406,6 +408,8 @@ static const struct of_device_id mdss_pll_dt_match[] = {
 	{.compatible = "qcom,mdss_dp_pll_sdm660"},
 	{.compatible = "qcom,mdss_dsi_pll_12nm"},
 	{.compatible = "qcom,mdss_dsi_pll_28lpm"},
+	{.compatible = "qcom,mdss_dsi_pll_sdm630"},
+	{.compatible = "qcom,mdss_dp_pll_sdm630"},
 	{}
 };
 

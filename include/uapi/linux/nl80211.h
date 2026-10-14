@@ -2824,8 +2824,6 @@ enum nl80211_attrs {
 	NL80211_ATTR_HE_6GHZ_CAPABILITY =
 	NL80211_ATTR_WIPHY_EDMG_BW_CONFIG + 12,
 
-	NL80211_ATTR_MAX_NUM_AKM_SUITES,
-
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,

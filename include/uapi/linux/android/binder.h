@@ -90,6 +90,7 @@ enum flat_binder_object_flags {
 	 */
 	FLAT_BINDER_FLAG_INHERIT_RT = 0x800,
 
+#ifdef __KERNEL__
 	/**
 	 * @FLAT_BINDER_FLAG_TXN_SECURITY_CTX: request security contexts
 	 *
@@ -97,6 +98,7 @@ enum flat_binder_object_flags {
 	 * context
 	 */
 	FLAT_BINDER_FLAG_TXN_SECURITY_CTX = 0x1000,
+#endif /* __KERNEL__ */
 };
 
 #ifdef BINDER_IPC_32BIT
@@ -319,7 +321,6 @@ enum transaction_flags {
 	TF_STATUS_CODE	= 0x08,	/* contents are a 32-bit status code */
 	TF_ACCEPT_FDS	= 0x10,	/* allow replies with file descriptors */
 	TF_CLEAR_BUF	= 0x20,	/* clear buffer on txn complete */
-	TF_UPDATE_TXN	= 0x40,	/* update the outdated pending async txn */
 };
 
 struct binder_transaction_data {
@@ -357,10 +358,12 @@ struct binder_transaction_data {
 	} data;
 };
 
+#ifdef __KERNEL__
 struct binder_transaction_data_secctx {
 	struct binder_transaction_data transaction_data;
 	binder_uintptr_t secctx;
 };
+#endif /* __KERNEL__ */
 
 struct binder_transaction_data_sg {
 	struct binder_transaction_data transaction_data;
@@ -397,11 +400,13 @@ enum binder_driver_return_protocol {
 	BR_OK = _IO('r', 1),
 	/* No parameters! */
 
+#ifdef __KERNEL__
 	BR_TRANSACTION_SEC_CTX = _IOR('r', 2,
 				      struct binder_transaction_data_secctx),
 	/*
 	 * binder_transaction_data_secctx: the received command.
 	 */
+#endif /* __KERNEL__ */
 	BR_TRANSACTION = _IOR('r', 2, struct binder_transaction_data),
 	BR_REPLY = _IOR('r', 3, struct binder_transaction_data),
 	/*

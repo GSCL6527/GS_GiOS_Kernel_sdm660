@@ -123,6 +123,8 @@ int rcu_num_lvls __read_mostly = RCU_NUM_LVLS;
 /* Number of rcu_nodes at specified level. */
 int num_rcu_lvl[] = NUM_RCU_LVL_INIT;
 int rcu_num_nodes __read_mostly = NUM_RCU_NODES; /* Total # rcu_nodes in use. */
+/* panic() on RCU Stall sysctl. */
+int sysctl_panic_on_rcu_stall __read_mostly = CONFIG_RCU_PANIC_ON_STALL;
 
 /*
  * The rcu_scheduler_active variable is initialized to the value
@@ -246,6 +248,13 @@ static long rcu_get_n_cbs_cpu(int cpu)
 void rcu_softirq_qs(void)
 {
 	rcu_qs();
+	rcu_preempt_deferred_qs(current);
+}
+
+void rcu_softirq_qs(void)
+{
+	rcu_sched_qs();
+	rcu_preempt_qs();
 	rcu_preempt_deferred_qs(current);
 }
 
@@ -649,9 +658,7 @@ static noinstr void rcu_eqs_enter(bool user)
 	rdp = this_cpu_ptr(&rcu_data);
 	rcu_prepare_for_idle();
 	rcu_preempt_deferred_qs(current);
-	instrumentation_end();
-	WRITE_ONCE(rdp->dynticks_nesting, 0); /* Avoid irq-access tearing. */
-	// RCU is watching here ...
+	WRITE_ONCE(rdtp->dynticks_nesting, 0); /* Avoid irq-access tearing. */
 	rcu_dynticks_eqs_enter();
 	// ... but is no longer watching here.
 	rcu_dynticks_task_enter();
@@ -2682,8 +2689,43 @@ static __latent_entropy void rcu_core(void)
 	unsigned long flags;
 	struct rcu_data *rdp = raw_cpu_ptr(&rcu_data);
 	struct rcu_node *rnp = rdp->mynode;
-	const bool offloaded = IS_ENABLED(CONFIG_RCU_NOCB_CPU) &&
-			       rcu_segcblist_is_offloaded(&rdp->cblist);
+
+	WARN_ON_ONCE(!rdp->beenonline);
+
+	/* Report any deferred quiescent states if preemption enabled. */
+	if (!(preempt_count() & PREEMPT_MASK))
+		rcu_preempt_deferred_qs(current);
+	else if (rcu_preempt_need_deferred_qs(current))
+		resched_cpu(rdp->cpu); /* Provoke future context switch. */
+
+	/* Update RCU state based on any recent quiescent states. */
+	rcu_check_quiescent_state(rsp, rdp);
+
+	/* No grace period and unregistered callbacks? */
+	if (!rcu_gp_in_progress(rsp) &&
+	    rcu_segcblist_is_enabled(&rdp->cblist)) {
+		local_irq_save(flags);
+		if (!rcu_segcblist_restempty(&rdp->cblist, RCU_NEXT_READY_TAIL))
+			rcu_accelerate_cbs_unlocked(rsp, rnp, rdp);
+		local_irq_restore(flags);
+	}
+
+	rcu_check_gp_start_stall(rsp, rnp, rdp);
+
+	/* If there are callbacks ready, invoke them. */
+	if (rcu_segcblist_ready_cbs(&rdp->cblist))
+		invoke_rcu_callbacks(rsp, rdp);
+
+	/* Do any needed deferred wakeups of rcuo kthreads. */
+	do_nocb_deferred_wakeup(rdp);
+}
+
+/*
+ * Do RCU core processing for the current CPU.
+ */
+static __latent_entropy void rcu_process_callbacks(struct softirq_action *unused)
+{
+	struct rcu_state *rsp;
 
 	if (cpu_is_offline(smp_processor_id()))
 		return;
@@ -4140,6 +4182,8 @@ void rcu_report_dead(unsigned int cpu)
 	rcu_report_exp_rdp(this_cpu_ptr(&rcu_data));
 	preempt_enable();
 	rcu_preempt_deferred_qs(current);
+	for_each_rcu_flavor(rsp)
+		rcu_cleanup_dying_idle_cpu(cpu, rsp);
 
 	/* Remove outgoing CPU from mask in the leaf rcu_node structure. */
 	mask = rdp->grpmask;

@@ -38,11 +38,12 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/sched.h>
-#include <linux/devfreq_boost.h>
 #include <uapi/linux/sched/types.h>
-#ifdef CONFIG_PAPER_OPLUS_BACKLIGHT
-#include <linux/input/tp_common.h>
+#ifdef CONFIG_MACH_MI
+#include <linux/interrupt.h>
+#include <linux/pm_wakeup.h>
 #endif
+
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
@@ -50,6 +51,8 @@
 #include "mdss_smmu.h"
 #include "mdss_mdp.h"
 #include "mdss_sync.h"
+
+#include "mdss_livedisplay.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -79,6 +82,9 @@
 
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
+#ifdef CONFIG_MACH_MI
+static struct msm_fb_data_type *mfd_data;
+#endif
 
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -118,57 +124,7 @@ static int mdss_fb_send_panel_event(struct msm_fb_data_type *mfd,
 static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd,
 		int type);
 
-static int lcd_backlight_registered;
-#ifdef CONFIG_PAPER_OPLUS_BACKLIGHT
-static struct led_classdev backlight_led;
-static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
-			enum led_brightness value);
-
-static int oplus_backlight_cover(int value)
-{
-	int input_min = 222, input_max = 8191;
-	int input_span = 7969, out_span = 4094;
-	int output_min = 1, output_max = 4095;
-
-	if (value <= input_min)
-		return output_min;
-	if (value >= input_max)
-		return output_max;
-
-	return (((value - input_min) * out_span * 2 + input_span) /
-		(input_span * 2)) + output_min;
-}
-
-static ssize_t oplus_backlight_show(struct kobject *kobj,
-			struct kobj_attribute *attr, char *buf)
-{
-	return 0;
-}
-
-static ssize_t oplus_backlight_store(struct kobject *kobj,
-			struct kobj_attribute *attr, const char *buf,
-			size_t count)
-{
-	int value = 0;
-
-	sscanf(buf, "%u", &value);
-	value = oplus_backlight_cover(value);
-
-	if (lcd_backlight_registered) {
-		enum led_brightness brightness = (enum led_brightness)value;
-		mdss_fb_set_bl_brightness(&backlight_led, brightness);
-	}
-
-	return count;
-}
-
-static struct tp_common_ops oplus_backlight_ops = {
-	.show = oplus_backlight_show,
-	.store = oplus_backlight_store,
-};
-#endif
-
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 #define WAIT_RESUME_TIMEOUT 200
 static struct fb_info *prim_fbi;
 static atomic_t prim_panel_is_on;
@@ -187,11 +143,13 @@ static void prim_panel_off_delayed_work(struct work_struct *work)
 #endif
 		return;
 	}
+
 	if (atomic_read(&prim_panel_is_on)) {
 		fb_blank(prim_fbi, FB_BLANK_POWERDOWN);
 		atomic_set(&prim_panel_is_on, false);
 		__pm_relax(mfd->prim_panel_wakelock);
 	}
+
 	unlock_fb_info(prim_fbi);
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE
 	console_unlock();
@@ -347,6 +305,8 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 		ret = copy_to_user(argp, &to_user, sizeof(unsigned int));
 	return ret;
 }
+
+static int lcd_backlight_registered;
 
 static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 				      enum led_brightness value)
@@ -1069,7 +1029,7 @@ static int mdss_fb_create_sysfs(struct msm_fb_data_type *mfd)
 	rc = sysfs_create_group(&mfd->fbi->dev->kobj, &mdss_fb_attr_group);
 	if (rc)
 		pr_err("sysfs group creation failed, rc=%d\n", rc);
-	return rc;
+	return mdss_livedisplay_create_sysfs(mfd);
 }
 
 static void mdss_fb_remove_sysfs(struct msm_fb_data_type *mfd)
@@ -1346,6 +1306,46 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	return 0;
 }
 
+#ifdef CONFIG_MACH_MI
+static irqreturn_t esd_err_irq_handle(int irq, void *data)
+{
+	struct msm_fb_data_type *mfd = data;
+
+	if (mfd && mdss_fb_is_power_off(mfd)) {
+		pr_debug("%s: ESD at power off state \n", __func__);
+		return IRQ_HANDLED;
+	}
+
+	pr_info("%s: ESD ERR detected!\n", __func__);
+
+	if (mfd) {
+		struct mdss_panel_data *pdata =
+			dev_get_platdata(&mfd->pdev->dev);
+		if (pdata->panel_info.panel_dead == true) {
+			pr_err("%s:already in recoverying", __func__);
+			return IRQ_HANDLED;
+		}
+		mdss_fb_report_panel_dead(mfd);
+	}
+	else
+		pr_err("%s: mfd is NULL\n", __func__);
+
+	return IRQ_HANDLED;
+}
+
+void mdss_fb_prim_panel_recover(void)
+{
+	pr_info("Primary panel recover...\n");
+
+	if (mfd_data)
+		mdss_fb_report_panel_dead(mfd_data);
+	else
+		pr_err("%s: Primary panel mfd is NULL\n", __func__);
+
+	pr_info("Primary panel recover done\n");
+}
+#endif
+
 static int mdss_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = NULL;
@@ -1512,9 +1512,25 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
 
-#ifdef CONFIG_PAPER_OPLUS_BACKLIGHT
-	tp_common_set_oplus_backlight_ops(&oplus_backlight_ops);
+#ifdef CONFIG_MACH_MI
+	if (mfd->panel_info->esd_err_irq > 0) {
+		if (mfd->panel_info->esd_interrupt_flags) {
+			rc = request_threaded_irq(mfd->panel_info->esd_err_irq, NULL,
+				esd_err_irq_handle, (unsigned long)mfd->panel_info->esd_interrupt_flags,
+				"esd_err_irq", mfd);
+			if (rc < 0) {
+				pr_err("%s: request irq %d, flag:0x%x  failed\n", __func__, mfd->panel_info->esd_err_irq,
+					mfd->panel_info->esd_interrupt_flags);
+			}
+		}
+	}
+
+	if (mfd->panel_info->is_prim_panel) {
+		mfd_data = mfd;
+		pdata->panel_dead_report = mdss_fb_prim_panel_recover;
+	}
 #endif
+
 	return rc;
 }
 
@@ -1549,7 +1565,7 @@ static int mdss_fb_remove(struct platform_device *pdev)
 	if (!mfd)
 		return -ENODEV;
 
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	if (mfd->panel_info && mfd->panel_info->is_prim_panel) {
 		atomic_set(&prim_panel_is_on, false);
 		cancel_delayed_work_sync(&mfd->prim_panel_work);
@@ -1564,9 +1580,7 @@ static int mdss_fb_remove(struct platform_device *pdev)
 		return -EINVAL;
 
 	mdss_fb_unregister_input_handler(mfd);
-#ifdef CONFIG_DEBUG_FS
 	mdss_panel_debugfs_cleanup(mfd->panel_info);
-#endif
 
 	if (mdss_fb_suspend_sub(mfd))
 		pr_err("msm_fb_remove: can't stop the device %d\n",
@@ -1735,19 +1749,22 @@ static int mdss_fb_resume(struct platform_device *pdev)
 #endif
 
 #ifdef CONFIG_PM_SLEEP
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 static int mdss_fb_pm_prepare(struct device *dev)
 {
 	struct msm_fb_data_type *mfd = dev_get_drvdata(dev);
+
 	if (!mfd)
 		return -ENODEV;
 	if (mfd->panel_info->is_prim_panel)
 		atomic_inc(&mfd->resume_pending);
 	return 0;
 }
+
 static void mdss_fb_pm_complete(struct device *dev)
 {
 	struct msm_fb_data_type *mfd = dev_get_drvdata(dev);
+
 	if (!mfd)
 		return;
 	if (mfd->panel_info->is_prim_panel) {
@@ -1813,7 +1830,7 @@ static int mdss_fb_pm_resume(struct device *dev)
 #endif
 
 static const struct dev_pm_ops mdss_fb_pm_ops = {
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	.prepare = mdss_fb_pm_prepare,
 	.complete = mdss_fb_pm_complete,
 #endif
@@ -1836,7 +1853,6 @@ static struct platform_driver mdss_fb_driver = {
 		.name = "mdss_fb",
 		.of_match_table = mdss_fb_dt_match,
 		.pm = &mdss_fb_pm_ops,
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
@@ -2252,7 +2268,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	struct mdss_panel_data *pdata;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	if ((info == prim_fbi) && (blank_mode == FB_BLANK_UNBLANK) &&
 		atomic_read(&prim_panel_is_on)) {
 		atomic_set(&prim_panel_is_on, false);
@@ -2893,7 +2909,7 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	atomic_set(&mfd->commits_pending, 0);
 	atomic_set(&mfd->ioctl_ref_cnt, 0);
 	atomic_set(&mfd->kickoff_pending, 0);
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	atomic_set(&mfd->resume_pending, 0);
 #endif
 
@@ -2910,7 +2926,7 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	init_waitqueue_head(&mfd->idle_wait_q);
 	init_waitqueue_head(&mfd->ioctl_q);
 	init_waitqueue_head(&mfd->kickoff_wait_q);
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	init_waitqueue_head(&mfd->resume_wait_q);
 #endif
 
@@ -2927,13 +2943,10 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 
 	snprintf(panel_name, ARRAY_SIZE(panel_name), "mdss_panel_fb%d",
 		mfd->index);
-#ifdef CONFIG_DEBUG_FS
 	mdss_panel_debugfs_init(panel_info, panel_name);
-#endif
 	pr_info("FrameBuffer[%d] %dx%d registered successfully!\n", mfd->index,
 					fbi->var.xres, fbi->var.yres);
-
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	if (panel_info->is_prim_panel) {
 		prim_fbi = fbi;
 		atomic_set(&prim_panel_is_on, false);
@@ -3670,10 +3683,12 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 	} else
 		mfd->bl_extn_level = U64_MAX;
 
+	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
 	atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
 	atomic_inc(&mfd->commits_pending);
 	atomic_inc(&mfd->kickoff_pending);
 	wake_up_all(&mfd->commit_wait_q);
+	mutex_unlock(&mfd->mdp_sync_pt_data.sync_mutex);
 
 	if (wait_for_finish)
 		ret = mdss_fb_pan_idle(mfd);
@@ -3868,7 +3883,7 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	struct msm_sync_pt_data *sync_pt_data = &mfd->mdp_sync_pt_data;
 	struct msm_fb_backup_type *fb_backup = &mfd->msm_fb_backup;
 	int ret = -ENOTSUPP;
-	u32 new_dsi_mode = 0, dynamic_dsi_switch = 0;
+	u32 new_dsi_mode, dynamic_dsi_switch = 0;
 
 	if (mfd->panel_info->panel_dead) {
 		pr_debug("Panel dead, Signal fence and exit commit\n");
@@ -3976,7 +3991,7 @@ static int __mdss_fb_display_thread(void *data)
 				mfd->index);
 
 	while (1) {
-		wait_event_interruptible(mfd->commit_wait_q,
+		wait_event(mfd->commit_wait_q,
 				(atomic_read(&mfd->commits_pending) ||
 				 kthread_should_stop()));
 
@@ -4488,7 +4503,7 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 				 struct mdp_buf_sync *buf_sync)
 {
 	int i, ret = 0;
-	int acq_fen_fd[MDP_MAX_FENCE_FD] = { 0 };
+	int acq_fen_fd[MDP_MAX_FENCE_FD];
 	struct mdss_fence *fence, *rel_fence, *retire_fence;
 	int rel_fen_fd;
 	int retire_fen_fd;
@@ -5231,7 +5246,6 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = mdss_fb_mode_switch(mfd, dsi_mode);
 		break;
 	case MSMFB_ATOMIC_COMMIT:
-		devfreq_boost_kick(DEVFREQ_MSM_CPU_DDR_BW);
 		ret = mdss_fb_atomic_commit_ioctl(info, argp, file);
 		break;
 
@@ -5385,6 +5399,25 @@ int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num)
 }
 EXPORT_SYMBOL(mdss_fb_get_phys_info);
 
+#ifdef CONFIG_MACH_MI
+bool mdss_panel_is_prim(void *fbinfo)
+{
+	struct msm_fb_data_type *mfd;
+	struct mdss_panel_info *pinfo;
+	struct fb_info *fbi = fbinfo;
+
+	if (!fbi)
+		return false;
+	mfd = fbi->par;
+	if (!mfd)
+		return false;
+	pinfo = mfd->panel_info;
+	if (!pinfo)
+		return false;
+	return pinfo->is_prim_panel;
+}
+#endif
+
 int __init mdss_fb_init(void)
 {
 	int rc = -ENODEV;
@@ -5502,7 +5535,7 @@ void mdss_fb_idle_pc(struct msm_fb_data_type *mfd)
 	}
 }
 
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 /*
  * mdss_prim_panel_fb_unblank() - Unblank primary panel FB
  * @timeout : >0 blank primary panel FB after timeout (ms)
@@ -5511,6 +5544,7 @@ int mdss_prim_panel_fb_unblank(int timeout)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd = NULL;
+
 	if (prim_fbi) {
 		mfd = (struct msm_fb_data_type *)prim_fbi->par;
 		ret = wait_event_timeout(mfd->resume_wait_q,
@@ -5552,6 +5586,7 @@ int mdss_prim_panel_fb_unblank(int timeout)
 #endif
 		return ret;
 	}
+
 	pr_err("primary panel is not existed\n");
 	return -EINVAL;
 }

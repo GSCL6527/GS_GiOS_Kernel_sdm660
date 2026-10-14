@@ -387,6 +387,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_2_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_3_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_4_0) |
+		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_4_5) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_5_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_6_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_7_0)
@@ -1662,7 +1663,6 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 			*num_buffers = max(*num_buffers, min_req_buffers);
 		}
 
-#ifdef CONFIG_DEBUG_FS
 		if (*num_buffers < MIN_NUM_CAPTURE_BUFFERS ||
 				*num_buffers > VB2_MAX_FRAME) {
 			int temp = *num_buffers;
@@ -1674,7 +1674,6 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 				"Changing buffer count on CAPTURE_MPLANE from %d to %d for best effort encoding\n",
 				temp, *num_buffers);
 		}
-#endif
 
 		msm_venc_update_plane_count(inst, CAPTURE_PORT);
 		*num_planes = inst->fmts[CAPTURE_PORT].num_planes;

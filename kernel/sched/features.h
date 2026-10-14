@@ -50,7 +50,7 @@
  * Queue remote wakeups on the target CPU and process them
  * using the scheduler IPI. Reduces rq->lock contention/bounces.
  */
-#define SCHED_FEAT_TTWU_QUEUE 1
+SCHED_FEAT(TTWU_QUEUE, false)
 
 /*
  * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
@@ -97,7 +97,7 @@
 /*
  * Fast pre-selection of CPU candidates for EAS.
  */
-#define SCHED_FEAT_FIND_BEST_TARGET 1
+SCHED_FEAT(FIND_BEST_TARGET, true)
 
 /*
  * Energy aware scheduling algorithm choices:

@@ -55,7 +55,7 @@
 
 #include <trace/events/xen.h>
 
-#include <asm/pgtable.h>
+#include <linux/pgtable.h>
 #include <asm/tlbflush.h>
 #include <asm/fixmap.h>
 #include <asm/mmu_context.h>
@@ -2599,12 +2599,6 @@ int xen_create_contiguous_region(phys_addr_t pstart, unsigned int order,
 	unsigned long  flags;
 	int            success;
 	unsigned long vstart = (unsigned long)phys_to_virt(pstart);
-
-	/*
-	 * Currently an auto-translated guest will not perform I/O, nor will
-	 * it require PAE page directories below 4GB. Therefore any calls to
-	 * this function are redundant and can be ignored.
-	 */
 
 	if (unlikely(order > MAX_CONTIG_ORDER))
 		return -ENOMEM;

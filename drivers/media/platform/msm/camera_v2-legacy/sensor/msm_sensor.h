@@ -27,8 +27,8 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
-#include <soc/qcom/camera2-legacy.h>
-#include <media/msm_cam_sensor-legacy.h>
+#include <soc/qcom/camera2.h>
+#include <media/msm_cam_sensor.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-ioctl.h>
 #include "msm_camera_i2c.h"
@@ -104,8 +104,11 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl);
 
 int msm_sensor_update_cfg(struct msm_sensor_ctrl_t *s_ctrl);
 
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 int msm_sensor_match_vendor_id(struct msm_sensor_ctrl_t *s_ctrl);
+#endif
+#ifdef CONFIG_MACH_MI
+int msm_sensor_match_vcm_id(struct msm_sensor_ctrl_t *s_ctrl);
 #endif
 
 int msm_sensor_free_sensor_data(struct msm_sensor_ctrl_t *s_ctrl);

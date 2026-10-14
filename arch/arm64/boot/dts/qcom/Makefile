@@ -12,4 +12,3 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sdm845-mtp.dtb
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
 clean-files    := *.dtb *.dtbo
-endif

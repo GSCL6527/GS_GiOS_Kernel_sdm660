@@ -22,7 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #include <linux/reset.h>
-#include <soc/qcom/camera2-legacy.h>
+#include <soc/qcom/camera2.h>
 
 enum cam_bus_client {
 	CAM_BUS_CLIENT_VFE,

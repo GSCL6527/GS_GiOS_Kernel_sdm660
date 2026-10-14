@@ -1,9 +1,20 @@
-// SPDX-License-Identifier: GPL-2.0-only
-
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
 #include "longcheer-pm660.dtsi"
+#include "longcheer-sdm660-audio.dtsi"
 #include "longcheer-sdm660-camera.dtsi"
 #include "longcheer-sdm660-mdss.dtsi"
 #include "longcheer-sdm660-mtp.dtsi"
+#include "longcheer-sdm660-pinctrl.dtsi"
 #include "longcheer-sdm660-ramoops.dtsi"
 
 /* sdm660.dtsi common diff */
@@ -16,14 +27,6 @@
 			<0x78607C 0x4>;
 		reg-names = "sn-base","fuse-state";
 	};
-
-	qcom,msm_fastrpc {
-		/delete-property/ qcom,fastrpc-adsp-sensors-pdr;
-	};
-
-	thermal_message: thermal-message {
-		board-sensor = "quiet_therm";
-	};
 };
 
 &qcom_seecom {
@@ -31,25 +34,8 @@
 };
 
 /* sdm660-blsp.dtsi common diff */
-&i2c_1 {
-	status = "ok";
-	qcom,disable-dma;
-	novatek@62 {
-		compatible = "novatek,NVT-ts";
-		reg = <0x62>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <67 0x2008>;
-		vcc_i2c-supply = <&pm660_l11>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		novatek,reset-gpio = <&tlmm 66 0x00>;
-		novatek,irq-gpio = <&tlmm 67 0x2001>;
-	};
-};
-
 &spi_7 {
-	status = "ok";
+	status = "okay";
 
 	device@1 {
 		compatible = "qcom,spi-msm-codec-slave";
@@ -62,14 +48,17 @@
 };
 
 /* sdm660-internal-codec.dtsi common diff */
+&spi_7 {
+	status = "okay";
+};
+
 &int_codec {
 	qcom,wsa-disable;
 };
 
 &i2c_6 { /* SmartPA TI */
-	status = "ok";
+	status = "okay";
 	tas2557@4c {
-		status = "ok";
 		compatible = "ti,tas2557";
 		reg = <0x4c>;
 		#ti,load = <0>;   /* 0, 8Ohm; 1, 6Ohm; 2, 4Ohm */
@@ -80,13 +69,12 @@
 		ti,cdc-reset-gpio = <&tlmm 77 0>;
 		ti,irq-gpio = <&tlmm 73 0>;
 		ti,i2s-bits = <16>;
-		ti,bypass-tmax = <0>;   /* 0, not bypass; 1, bypass */
-		ti,bob-fast-profile = <1>; /* 1:voice_handset */
+		status = "ok";
 	};
 
 	max98927@3a {
-		status = "ok";
 		compatible = "maxim,max98927L";
+		status = "okay";
 		reg = <0x3a>;
 		mono_stereo_mode = <0>;
 		interleave_mode = <0>;
@@ -94,7 +82,6 @@
 	};
 
  	tfa98xx@34 {
-		status = "ok";
 		compatible = "nxp,tfa98xx";
 		reg = <0x34>;
 		i2c-pull-up;
@@ -102,17 +89,18 @@
 		vcc_i2c-supply = <&pm660l_l6>;
 		reset-gpio = <&tlmm 77 0>;
 		irq-gpio = <&tlmm 73 0>;
+		status = "ok";
 	};
 };
 
 /* sdm660-regulator common diff */
 &rpm_bus {
 	rpm-regulator-ldoa16 {
-		status = "ok";
+		status = "okay";
 		pm660_l16: regulator-l16 {
-			status = "ok";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
+			status = "okay";
 			regulator-always-on;
 		};
 	};
@@ -120,4 +108,8 @@
 
 &pm660l_l3 {
 	regulator-always-on;
+};
+
+&i2c_1 {
+	qcom,disable-dma;
 };

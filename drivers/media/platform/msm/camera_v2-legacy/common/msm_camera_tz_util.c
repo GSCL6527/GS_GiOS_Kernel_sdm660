@@ -14,7 +14,7 @@
 #include <linux/delay.h>
 #include <linux/ktime.h>
 #include <linux/mutex.h>
-#include <soc/qcom/camera2-legacy.h>
+#include <soc/qcom/camera2.h>
 #include <soc/qcom/scm.h>
 #include "qseecom_kernel.h"
 #include "msm_camera_io_util.h"

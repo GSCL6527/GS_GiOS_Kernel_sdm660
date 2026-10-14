@@ -27,10 +27,6 @@
 #include "msm_vidc_debug.h"
 #include "msm_vidc_dcvs.h"
 
-#ifdef CONFIG_TRACEPOINTS
-#define CREATE_TRACE_POINTS
-#endif
-
 #define IS_ALREADY_IN_STATE(__p, __d) ({\
 	int __rc = (__p >= __d);\
 	__rc; \
@@ -847,9 +843,7 @@ static void handle_sys_init_done(enum hal_command_response cmd, void *data)
 	core->dec_codec_supported = sys_init_msg->dec_codec_supported;
 
 	/* This should come from sys_init_done */
-	core->resources.max_inst_count =
-		sys_init_msg->max_sessions_supported ? :
-		MAX_SUPPORTED_INSTANCES;
+	core->resources.max_inst_count = 16;
 
 	core->resources.max_secure_inst_count =
 		core->resources.max_secure_inst_count ? :
@@ -2130,7 +2124,7 @@ static int handle_multi_stream_buffers(struct msm_vidc_inst *inst,
 		if (smem && dev_addr == smem->device_addr) {
 			if (binfo->buffer_ownership == DRIVER) {
 				dprintk(VIDC_ERR,
-					"FW returned same buffer: %llu\n",
+					"FW returned same buffer: %x\n",
 					dev_addr);
 				break;
 			}
@@ -2143,7 +2137,7 @@ static int handle_multi_stream_buffers(struct msm_vidc_inst *inst,
 
 	if (!found) {
 		dprintk(VIDC_ERR,
-			"Failed to find output buffer in queued list: %llu\n",
+			"Failed to find output buffer in queued list: %x\n",
 			dev_addr);
 	}
 
@@ -2387,7 +2381,7 @@ err_seq_hdr_done:
 	put_inst(inst);
 }
 
-void handle_cmd_response(enum hal_command_response cmd, void *data)
+void handle_cmd_response(u32 cmd, void *data)
 {
 	dprintk(VIDC_DBG, "Command response = %d\n", cmd);
 	switch (cmd) {
@@ -3969,20 +3963,17 @@ int msm_comm_qbuf(struct msm_vidc_inst *inst, struct vb2_buffer *vb)
 	 * Don't queue if:
 	 * 1) Hardware isn't ready (that's simple)
 	 */
-	if (!defer)
-		defer = inst->state != MSM_VIDC_START_DONE;
+	defer = defer ?: inst->state != MSM_VIDC_START_DONE;
 
 	/*
 	 * 2) The client explicitly tells us not to because it wants this
 	 * buffer to be batched with future frames.  The batch size (on both
 	 * capabilities) is completely determined by the client.
 	 */
-	if (!defer)
-		defer = vbuf && vbuf->flags & V4L2_MSM_BUF_FLAG_DEFER;
+	defer = defer ?: vbuf && vbuf->flags & V4L2_MSM_BUF_FLAG_DEFER;
 
 	/* 3) If we're in batch mode, we must have full batches of both types */
-	if (!defer)
-		defer = batch_mode && (!output_count || !capture_count);
+	defer = defer ?: batch_mode && (!output_count || !capture_count);
 
 	if (defer) {
 		dprintk(VIDC_DBG, "Deferring queue of %pK\n", vb);
@@ -4857,12 +4848,11 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 
 		/*Do not send flush in case of session_error */
 		if (!(inst->state == MSM_VIDC_CORE_INVALID &&
-				core->state != VIDC_CORE_INVALID)) {
+				core->state != VIDC_CORE_INVALID))
 			atomic_inc(&inst->in_flush);
 			dprintk(VIDC_DBG, "Send flush all to firmware\n");
 			rc = call_hfi_op(hdev, session_flush, inst->session,
 				HAL_FLUSH_ALL);
-		}
 	}
 
 	return rc;
@@ -5038,7 +5028,38 @@ static int msm_vidc_load_supported(struct msm_vidc_inst *inst)
 	}
 	return 0;
 }
+static int msm_vidc_check_mbpf_supported(struct msm_vidc_inst *inst)
+{
+	u32 mbpf = 0;
+	struct msm_vidc_core *core;
+	struct msm_vidc_inst *temp;
+	struct msm_vidc_capability *capability;
 
+	if (!inst || !inst->core)
+		return -EINVAL;
+
+	core = inst->core;
+	capability = &inst->capability;
+	mutex_lock(&core->lock);
+	list_for_each_entry(temp, &core->instances, list) {
+		/* ignore invalid and completed session */
+		if (temp->state == MSM_VIDC_CORE_INVALID ||
+			temp->state >= MSM_VIDC_STOP_DONE)
+			continue;
+		/* ignore thumbnail session */
+		if (is_thumbnail_session(temp))
+			continue;
+		 mbpf += NUM_MBS_PER_FRAME(inst->prop.width[OUTPUT_PORT],
+				inst->prop.height[OUTPUT_PORT]);
+	}
+	mutex_unlock(&core->lock);
+	if (mbpf > 2*capability->mbs_per_frame.max) {
+		msm_vidc_print_running_insts(inst->core);
+		return -EBUSY;
+	}
+
+	return 0;
+}
 int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst)
 {
 	u32 x_min, x_max, y_min, y_max;
@@ -5136,6 +5157,9 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 			"%s: Hardware is overloaded\n", __func__);
 		return rc;
 	}
+	rc = msm_vidc_check_mbpf_supported(inst);
+	if (rc)
+		return rc;
 
 	if (!is_thermal_permissible(core)) {
 		dprintk(VIDC_WARN,

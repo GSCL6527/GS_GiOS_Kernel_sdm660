@@ -18,11 +18,6 @@
 
 #define pr_fmt(fmt) "cma: " fmt
 
-#ifdef CONFIG_CMA_DEBUG
-#ifndef DEBUG
-#  define DEBUG
-#endif
-#endif
 #define CREATE_TRACE_POINTS
 
 #include <linux/memblock.h>
@@ -36,9 +31,8 @@
 #include <linux/highmem.h>
 #include <linux/io.h>
 #include <linux/kmemleak.h>
+#include <linux/delay.h>
 #include <linux/show_mem_notifier.h>
-#include <linux/sched.h>
-#include <linux/jiffies.h>
 #include <trace/events/cma.h>
 
 #include "cma.h"
@@ -465,8 +459,9 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 	size_t i;
 	struct page *page = NULL;
 	int ret = -ENOMEM;
-	int num_attempts = 0;
-	int max_retries = 5;
+	int retry_after_sleep = 0;
+	int max_retries = 20;
+	int available_regions = 0;
 
 	if (!cma || !cma->count)
 		return NULL;
@@ -493,29 +488,35 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 				bitmap_maxno, start, bitmap_count, mask,
 				offset);
 		if (bitmap_no >= bitmap_maxno) {
-			if ((num_attempts < max_retries) && (ret == -EBUSY)) {
-				mutex_unlock(&cma->lock);
-
-				if (fatal_signal_pending(current))
-					break;
-
+			if ((retry_after_sleep < max_retries) &&
+						(ret == -EBUSY)) {
+				start = 0;
+				/*
+				 * update max retries if available free regions
+				 * are less.
+				 */
+				if (available_regions < 3)
+					max_retries = 25;
+				available_regions = 0;
 				/*
 				 * Page may be momentarily pinned by some other
-				 * process which has been scheduled out, e.g.
+				 * process which has been scheduled out, eg.
 				 * in exit path, during unmap call, or process
 				 * fork and so cannot be freed there. Sleep
-				 * for 100ms and retry the allocation.
+				 * for 100ms and retry twice to see if it has
+				 * been freed later.
 				 */
-				start = 0;
-				ret = -ENOMEM;
-				schedule_timeout_killable(msecs_to_jiffies(100));
-				num_attempts++;
+				mutex_unlock(&cma->lock);
+				msleep(100);
+				retry_after_sleep++;
 				continue;
 			} else {
 				mutex_unlock(&cma->lock);
 				break;
 			}
 		}
+
+		available_regions++;
 		bitmap_set(cma->bitmap, bitmap_no, bitmap_count);
 		/*
 		 * It's safe to drop the lock here. We've marked this region for
@@ -559,8 +560,8 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 	}
 
 	if (ret && !no_warn) {
-		pr_err("%s: alloc failed, req-size: %zu pages, ret: %d\n",
-			__func__, count, ret);
+		pr_err("%s: %s: alloc failed, req-size: %zu pages, ret: %d\n",
+			__func__, cma->name, count, ret);
 		cma_debug_show_areas(cma);
 	}
 

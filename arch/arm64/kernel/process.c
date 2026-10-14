@@ -233,7 +233,7 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 	if (addr < PAGE_OFFSET || addr > -256UL)
 		return;
 
-	printk(KERN_DEBUG "\n%s: %ld:\n", name, addr);
+	printk(KERN_DEBUG "\n%s: %#lx:\n", name, addr);
 
 	/*
 	 * round address down to a 32 bit boundary
@@ -253,7 +253,7 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 		for (j = 0; j < 8; j++) {
 			u32	data;
 
-			if (probe_kernel_address(p, data))
+			if (get_kernel_nofault(data, p))
 				pr_cont(" ********");
 			else
 				pr_cont(" %08x", data);

@@ -341,6 +341,9 @@ static struct msm_soc_info cpu_of_id[] = {
 	/* SDM660 ID */
 	[317] = {MSM_CPU_SDM660, "SDM660"},
 
+	/* SDM630 ID */
+	[318] = {MSM_CPU_SDM630, "SDM630"},
+
 	/* SDM636 ID */
 	[345] = {MSM_CPU_SDM636, "SDM636"},
 
@@ -436,6 +439,9 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* QM215 ID */
 	[386] = {MSM_CPU_QM215, "QM215"},
+
+	/* QCM2150 ID */
+	[436] = {MSM_CPU_QCM2150, "QCM2150"},
 
 	/* 8953 ID */
 	[293] = {MSM_CPU_8953, "MSM8953"},
@@ -1546,9 +1552,17 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 317;
 		strlcpy(dummy_socinfo.build_id, "sdm660 - ",
 		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sdm630()) {
+		dummy_socinfo.id = 318;
+		strlcpy(dummy_socinfo.build_id, "sdm630 - ",
+		sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_sdm636()) {
 		dummy_socinfo.id = 345;
 		strlcpy(dummy_socinfo.build_id, "sdm636 - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sdm630()) {
+		dummy_socinfo.id = 318;
+		strlcpy(dummy_socinfo.build_id, "sdm630 - ",
 		sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_sm8150()) {
 		dummy_socinfo.id = 339;
@@ -1657,6 +1671,10 @@ static void * __init setup_dummy_socinfo(void)
 	} else if (early_machine_is_qm215()) {
 		dummy_socinfo.id = 386;
 		strlcpy(dummy_socinfo.build_id, "qm215 - ",
+				sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_qcm2150()) {
+		dummy_socinfo.id = 436;
+		strlcpy(dummy_socinfo.build_id, "qcm2150 - ",
 				sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msm8953()) {
 		dummy_socinfo.id = 293;

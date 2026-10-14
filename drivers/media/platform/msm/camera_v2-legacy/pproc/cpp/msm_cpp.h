@@ -23,7 +23,7 @@
 #include "msm_sd.h"
 #include "cam_soc_api.h"
 #include "cam_hw_ops.h"
-#include <media/msmb_pproc-legacy.h>
+#include <media/msmb_pproc.h>
 #include <soc/qcom/cx_ipeak.h>
 
 /* hw version info:

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -434,8 +435,8 @@ static bool put_wifi_interface_info(struct wifi_interface_info *stats,
 		    QCA_WLAN_VENDOR_ATTR_LL_STATS_IFACE_INFO_COUNTRY_STR,
 		    CFG_COUNTRY_CODE_LEN, stats->countryStr) ||
 	    nla_put_u32(vendor_event,
-		    QCA_WLAN_VENDOR_ATTR_LL_STATS_IFACE_INFO_TS_DUTY_CYCLE,
-		    stats->time_slice_duty_cycle)) {
+			QCA_WLAN_VENDOR_ATTR_LL_STATS_IFACE_INFO_TS_DUTY_CYCLE,
+			stats->time_slice_duty_cycle)) {
 		hdd_err("QCA_WLAN_VENDOR_ATTR put fail");
 		return false;
 	}
@@ -846,22 +847,6 @@ static int hdd_llstats_radio_fill_channels(struct hdd_adapter *adapter,
 			hdd_err("nla_put failed");
 			return -EINVAL;
 		}
-
-		if (adapter->hdd_ctx &&
-		    adapter->hdd_ctx->ll_stats_per_chan_rx_tx_time) {
-			if (nla_put_u32(
-				vendor_event,
-				QCA_WLAN_VENDOR_ATTR_LL_STATS_CHANNEL_TX_TIME,
-				channel_stats->tx_time) ||
-			    nla_put_u32(
-				vendor_event,
-				QCA_WLAN_VENDOR_ATTR_LL_STATS_CHANNEL_RX_TIME,
-				channel_stats->rx_time)) {
-				hdd_err("nla_put failed");
-				return -EINVAL;
-			}
-		}
-
 		nla_nest_end(vendor_event, chinfo);
 	}
 	nla_nest_end(vendor_event, chlist);
@@ -6935,13 +6920,13 @@ int wlan_hdd_get_temperature(struct hdd_adapter *adapter, int *temperature)
 
 void wlan_hdd_display_txrx_stats(struct hdd_context *ctx)
 {
-	struct hdd_adapter *adapter = NULL;
+	struct hdd_adapter *adapter = NULL, *next_adapter = NULL;
 	struct hdd_tx_rx_stats *stats;
 	int i = 0;
 	uint32_t total_rx_pkt, total_rx_dropped,
 		 total_rx_delv, total_rx_refused;
 
-	hdd_for_each_adapter_dev_held(ctx, adapter) {
+	hdd_for_each_adapter_dev_held_safe(ctx, adapter, next_adapter) {
 		total_rx_pkt = 0;
 		total_rx_dropped = 0;
 		total_rx_delv = 0;

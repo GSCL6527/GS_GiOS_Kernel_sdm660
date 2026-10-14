@@ -465,7 +465,7 @@ static struct sk_buff *fq_dequeue(struct Qdisc *sch)
 	struct sk_buff *skb;
 	struct fq_flow *f;
 	unsigned long rate;
- 	u32 plen;
+	u32 plen;
 
 	skb = fq_dequeue_head(sch, &q->internal);
 	if (skb)
@@ -492,11 +492,16 @@ begin:
 	}
 
 	skb = f->head;
-	if (unlikely(skb && now < f->time_next_packet &&
-		     !skb_is_tcp_pure_ack(skb))) {
-		head->first = f->next;
-		fq_flow_set_throttled(q, f);
-		goto begin;
+	if (skb && !skb_is_tcp_pure_ack(skb)) {
+		u64 time_next_packet = max_t(u64, ktime_to_ns(skb->tstamp),
+					     f->time_next_packet);
+
+		if (now < time_next_packet) {
+			head->first = f->next;
+			f->time_next_packet = time_next_packet;
+			fq_flow_set_throttled(q, f);
+			goto begin;
+		}
 	}
 
 	skb = fq_dequeue_head(sch, f);
@@ -514,11 +519,7 @@ begin:
 	prefetch(&skb->end);
 	f->credit -= qdisc_pkt_len(skb);
 
-	if (!q->rate_enable)
-		goto out;
-
-	/* Do not pace locally generated ack packets */
-	if (skb_is_tcp_pure_ack(skb))
+	if (ktime_to_ns(skb->tstamp) || !q->rate_enable)
 		goto out;
 
 	rate = q->flow_max_rate;
@@ -712,7 +713,8 @@ static int fq_change(struct Qdisc *sch, struct nlattr *opt,
 	if (!opt)
 		return -EINVAL;
 
-	err = nla_parse_nested(tb, TCA_FQ_MAX, opt, fq_policy, NULL);
+	err = nla_parse_nested_deprecated(tb, TCA_FQ_MAX, opt, fq_policy,
+					  NULL);
 	if (err < 0)
 		return err;
 

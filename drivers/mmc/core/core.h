@@ -38,6 +38,9 @@ struct mmc_bus_ops {
 	int (*change_bus_speed_deferred)(struct mmc_host *host,
 							unsigned long *freq);
 	bool (*cache_enabled)(struct mmc_host *);
+	int (*change_bus_speed)(struct mmc_host *host, unsigned long *freq);
+	int (*change_bus_speed_deferred)(struct mmc_host *host,
+							unsigned long *freq);
 };
 
 void mmc_attach_bus(struct mmc_host *host, const struct mmc_bus_ops *ops);

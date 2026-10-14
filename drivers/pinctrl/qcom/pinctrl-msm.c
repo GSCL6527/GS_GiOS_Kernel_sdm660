@@ -182,7 +182,7 @@ static int msm_pinmux_set_mux(struct pinctrl_dev *pctldev,
 	if (val & BIT(g->egpio_present))
 		val |= BIT(g->egpio_enable);
 
-	writel_relaxed(val, pctrl->regs + g->ctl_reg);
+	writel(val, pctrl->regs + g->ctl_reg);
 
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 
@@ -715,12 +715,12 @@ static void _msm_gpio_irq_unmask(struct irq_data *d, bool status_clear)
 		 * any erroneous interrupts that would have got latched
 		 * when the interrupt is not in use.
 		 */
-		val = readl_relaxed(pctrl->regs + g->intr_status_reg);
+		val = readl(pctrl->regs + g->intr_status_reg);
 		val &= ~BIT(g->intr_status_bit);
-		writel_relaxed(val, pctrl->regs + g->intr_status_reg);
+		writel(val, pctrl->regs + g->intr_status_reg);
 	}
 
-	val = readl_relaxed(pctrl->regs + g->intr_cfg_reg);
+	val = readl(pctrl->regs + g->intr_cfg_reg);
 	val |= BIT(g->intr_raw_status_bit);
 	val |= BIT(g->intr_enable_bit);
 	writel(val, pctrl->regs + g->intr_cfg_reg);
@@ -1112,7 +1112,32 @@ static int msm_gpio_irq_set_wake(struct irq_data *d, unsigned int on)
 	if (d->parent_data)
 		return irq_chip_set_wake_parent(d, on);
 
+	raw_spin_lock_irqsave(&pctrl->lock, flags);
+
 	irq_set_irq_wake(pctrl->irq, on);
+
+	return 0;
+}
+
+static int msm_gpio_irq_set_affinity(struct irq_data *d,
+				const struct cpumask *dest, bool force)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+
+	if (d->parent_data && test_bit(d->hwirq, pctrl->wakeup_masked_irqs))
+		return irq_chip_set_affinity_parent(d, dest, force);
+
+	return 0;
+}
+
+static int msm_gpio_irq_set_vcpu_affinity(struct irq_data *d, void *vcpu_info)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+
+	if (d->parent_data && test_bit(d->hwirq, pctrl->wakeup_masked_irqs))
+		return irq_chip_set_vcpu_affinity_parent(d, vcpu_info);
 
 	return 0;
 }
@@ -1251,7 +1276,7 @@ static int msm_gpio_domain_alloc(struct irq_domain *domain, unsigned int virq,
 				 unsigned int nr_irqs, void *arg)
 {
 	int ret;
-	irq_hw_number_t hwirq = 0;
+	irq_hw_number_t hwirq;
 	struct gpio_chip *gc = domain->host_data;
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 	struct irq_fwspec *fwspec = arg;

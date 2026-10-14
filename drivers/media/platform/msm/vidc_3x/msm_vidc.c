@@ -920,7 +920,7 @@ EXPORT_SYMBOL(msm_vidc_release_buffers);
 int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = instance;
-	struct buffer_info *binfo = NULL;
+	struct buffer_info *binfo;
 	int plane = 0;
 	int rc = 0;
 	int i;
@@ -1259,10 +1259,8 @@ void *msm_vidc_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
-#ifdef CONFIG_DEBUG_KERNEL
 	pr_info(VIDC_DBG_TAG "Opening video instance: %pK, %d\n",
 		VIDC_MSG_PRIO2STRING(VIDC_INFO), inst, session_type);
-#endif
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->bufq[CAPTURE_PORT].lock);
 	mutex_init(&inst->bufq[OUTPUT_PORT].lock);
@@ -1436,10 +1434,8 @@ int msm_vidc_destroy(struct msm_vidc_inst *inst)
 	mutex_destroy(&inst->lock);
 
 	msm_vidc_debugfs_deinit_inst(inst);
-#ifdef CONFIG_DEBUG_KERNEL
 	pr_info(VIDC_DBG_TAG "Closed video instance: %pK\n",
 			VIDC_MSG_PRIO2STRING(VIDC_INFO), inst);
-#endif
 	kfree(inst);
 	return 0;
 }

@@ -36,24 +36,10 @@ static int jump_label_cmp(const void *a, const void *b)
 	const struct jump_entry *jea = a;
 	const struct jump_entry *jeb = b;
 
-	/*
-	 * Entrires are sorted by key.
-	 */
 	if (jump_entry_key(jea) < jump_entry_key(jeb))
 		return -1;
 
 	if (jump_entry_key(jea) > jump_entry_key(jeb))
-		return 1;
-
-	/*
-	 * In the batching mode, entries should also be sorted by the code
-	 * inside the already sorted list of entries, enabling a bsearch in
-	 * the vector.
-	 */
-	if (jump_entry_code(jea) < jump_entry_code(jeb))
-		return -1;
-
-	if (jump_entry_code(jea) > jump_entry_code(jeb))
 		return 1;
 
 	return 0;
@@ -445,7 +431,6 @@ static bool jump_label_can_update(struct jump_entry *entry, bool init)
 	return true;
 }
 
-#ifndef HAVE_JUMP_LABEL_BATCH
 static void __jump_label_update(struct static_key *key,
 				struct jump_entry *entry,
 				struct jump_entry *stop,
@@ -610,7 +595,7 @@ static void __jump_label_mod_update(struct static_key *key)
 		else
 			stop = m->jump_entries + m->num_jump_entries;
 		__jump_label_update(key, mod->entries, stop,
-				    m && m->state == MODULE_STATE_COMING);
+				    m->state == MODULE_STATE_COMING);
 	}
 }
 

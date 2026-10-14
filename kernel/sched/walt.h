@@ -64,9 +64,6 @@ extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime);
 
 extern unsigned int walt_big_tasks(int cpu);
-#ifdef CONFIG_SONY_SCHED
-extern u64 walt_get_prev_group_run_sum(struct rq *rq);
-#endif
 
 static inline void
 inc_nr_big_task(struct walt_sched_stats *stats, struct task_struct *p)
@@ -182,12 +179,6 @@ extern void fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
 extern void inc_rq_walt_stats(struct rq *rq, struct task_struct *p);
 extern void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
 extern void fixup_busy_time(struct task_struct *p, int new_cpu);
-#ifdef CONFIG_SONY_SCHED
-extern void walt_prepare_migrate(struct task_struct *p,
-				 int src_cpu, int new_cpu, bool locked);
-extern void walt_finish_migrate(struct task_struct *p,
-				int src_cpu, int new_cpu, bool locked);
-#endif
 extern void init_new_task_load(struct task_struct *p);
 extern void mark_task_starting(struct task_struct *p);
 extern void set_window_start(struct rq *rq);
@@ -375,8 +366,6 @@ static inline unsigned int walt_nr_rtg_high_prio(int cpu)
 extern bool is_rtgb_active(void);
 extern u64 get_rtgb_active_time(void);
 #define SCHED_PRINT(arg)        printk_deferred("%s=%llu", #arg, arg)
-#define SCHED_PRINT_INT(arg)    printk_deferred("%s=%d", #arg, arg)
-#define SCHED_PRINT_UINT(arg)   printk_deferred("%s=%u", #arg, arg)
 #define STRG(arg)               #arg
 
 static inline void walt_task_dump(struct task_struct *p)
@@ -385,12 +374,12 @@ static inline void walt_task_dump(struct task_struct *p)
 	int i, j = 0;
 	int buffsz = NR_CPUS * 16;
 
-	SCHED_PRINT_INT(p->pid);
+	SCHED_PRINT(p->pid);
 	SCHED_PRINT(p->ravg.mark_start);
-	SCHED_PRINT_INT(p->ravg.demand);
-	SCHED_PRINT_INT(p->ravg.coloc_demand);
-	SCHED_PRINT_UINT(sched_ravg_window);
-	SCHED_PRINT_UINT(new_sched_ravg_window);
+	SCHED_PRINT(p->ravg.demand);
+	SCHED_PRINT(p->ravg.coloc_demand);
+	SCHED_PRINT(sched_ravg_window);
+	SCHED_PRINT(new_sched_ravg_window);
 
 	for (i = 0 ; i < nr_cpu_ids; i++)
 		j += scnprintf(buff + j, buffsz - j, "%u ",
@@ -406,8 +395,8 @@ static inline void walt_task_dump(struct task_struct *p)
 
 	SCHED_PRINT(p->last_wake_ts);
 	SCHED_PRINT(p->last_enqueued_ts);
-	SCHED_PRINT_INT(p->misfit);
-	SCHED_PRINT_UINT(p->unfilter);
+	SCHED_PRINT(p->misfit);
+	SCHED_PRINT(p->unfilter);
 }
 
 static inline void walt_rq_dump(int cpu)
@@ -430,7 +419,7 @@ static inline void walt_rq_dump(int cpu)
 
 	printk_deferred("==========================================");
 	SCHED_PRINT(rq->window_start);
-	SCHED_PRINT_UINT(rq->prev_window_size);
+	SCHED_PRINT(rq->prev_window_size);
 	SCHED_PRINT(rq->curr_runnable_sum);
 	SCHED_PRINT(rq->prev_runnable_sum);
 	SCHED_PRINT(rq->nt_curr_runnable_sum);
@@ -451,8 +440,8 @@ static inline void walt_rq_dump(int cpu)
 	}
 	if (!exiting_task(tsk))
 		walt_task_dump(tsk);
-	SCHED_PRINT_UINT(sched_capacity_margin_up[cpu]);
-	SCHED_PRINT_UINT(sched_capacity_margin_down[cpu]);
+	SCHED_PRINT(sched_capacity_margin_up[cpu]);
+	SCHED_PRINT(sched_capacity_margin_down[cpu]);
 }
 
 static inline void walt_dump(void)
@@ -461,18 +450,18 @@ static inline void walt_dump(void)
 
 	printk_deferred("============ WALT RQ DUMP START ==============\n");
 	printk_deferred("Sched ktime_get: %llu\n", sched_ktime_clock());
-	printk_deferred("Time last window changed=%llu\n",
+	printk_deferred("Time last window changed=%lu\n",
 			sched_ravg_window_change_time);
 	for_each_online_cpu(cpu) {
 		walt_rq_dump(cpu);
 	}
-	SCHED_PRINT_UINT(max_possible_capacity);
-	SCHED_PRINT_UINT(min_max_possible_capacity);
+	SCHED_PRINT(max_possible_capacity);
+	SCHED_PRINT(min_max_possible_capacity);
 
 	printk_deferred("============ WALT RQ DUMP END ==============\n");
 }
 
-static __maybe_unused int in_sched_bug;
+static int in_sched_bug;
 #define SCHED_BUG_ON(condition)				\
 ({							\
 	if (unlikely(!!(condition)) && !in_sched_bug) {	\
@@ -523,13 +512,6 @@ static inline unsigned int walt_big_tasks(int cpu)
 	return 0;
 }
 
-#ifdef CONFIG_SONY_SCHED
-static inline u64 walt_get_prev_group_run_sum(struct rq *rq)
-{
-	return 0;
-}
-#endif
-
 static inline void walt_adjust_nr_big_tasks(struct rq *rq,
 		int delta, bool inc)
 {
@@ -550,12 +532,6 @@ static inline void walt_dec_cumulative_runnable_avg(struct rq *rq,
 }
 
 static inline void fixup_busy_time(struct task_struct *p, int new_cpu) { }
-#ifdef CONFIG_SONY_SCHED
-static inline void walt_prepare_migrate(struct task_struct *p,
-		int src_cpu, int new_cpu, bool locked) { }
-static inline void walt_finish_migrate(struct task_struct *p,
-		int src_cpu, int new_cpu, bool locked) { }
-#endif
 static inline void init_new_task_load(struct task_struct *p)
 {
 }

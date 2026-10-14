@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __KGSL_H
 #define __KGSL_H
@@ -197,6 +198,8 @@ struct kgsl_memdesc_ops {
 #define KGSL_MEMDESC_RECLAIMED BIT(12)
 /* Skip reclaim of the memdesc pages */
 #define KGSL_MEMDESC_SKIP_RECLAIM BIT(13)
+/* Use SHMEM for allocation */
+#define KGSL_MEMDESC_USE_SHMEM BIT(14)
 
 /**
  * struct kgsl_memdesc - GPU memory object descriptor
@@ -317,7 +320,7 @@ typedef void (*kgsl_event_func)(struct kgsl_device *, struct kgsl_event_group *,
  * @priv: Private data passed to the callback function
  * @node: List node for the kgsl_event_group list
  * @created: Jiffies when the event was created
- * @work: Work struct for dispatching the callback
+ * @work: kthread_work struct for dispatching the callback
  * @result: KGSL event result type to pass to the callback
  * group: The event group this event belongs to
  */
@@ -329,7 +332,7 @@ struct kgsl_event {
 	void *priv;
 	struct list_head node;
 	unsigned int created;
-	struct work_struct work;
+	struct kthread_work work;
 	int result;
 	struct kgsl_event_group *group;
 };
@@ -490,6 +493,8 @@ void kgsl_mmu_remove_global(struct kgsl_device *device,
 		struct kgsl_memdesc *memdesc);
 
 /* Helper functions */
+unsigned long kgsl_get_align(struct kgsl_memdesc *memdesc);
+
 int kgsl_request_irq(struct platform_device *pdev, const  char *name,
 		irq_handler_t handler, void *data);
 
@@ -566,19 +571,18 @@ static inline void kgsl_schedule_work(struct work_struct *work)
 	queue_work(kgsl_driver.workqueue, work);
 }
 
-static inline struct kgsl_mem_entry *
+static inline int
 kgsl_mem_entry_get(struct kgsl_mem_entry *entry)
 {
-	if (!IS_ERR_OR_NULL(entry) && kref_get_unless_zero(&entry->refcount))
-		return entry;
-
-	return NULL;
+	if (entry)
+		return kref_get_unless_zero(&entry->refcount);
+	return 0;
 }
 
 static inline void
 kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
 {
-	if (!IS_ERR_OR_NULL(entry))
+	if (entry)
 		kref_put(&entry->refcount, kgsl_mem_entry_destroy);
 }
 

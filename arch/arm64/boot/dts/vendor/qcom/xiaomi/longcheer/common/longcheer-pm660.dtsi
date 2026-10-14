@@ -1,4 +1,14 @@
-// SPDX-License-Identifier: GPL-2.0-only
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
 
 /* common diff with msm-pm660.dtsi */
 &spmi_bus {
@@ -33,26 +43,12 @@
 	};
 };
 
-&pm660_adc_tm {
-	io-channels = <&pm660_vadc ADC_XO_THERM_PU2>,
-			<&pm660_vadc ADC_AMUX_THM1_PU2>,
-			<&pm660_vadc ADC_AMUX_THM5_PU2>,
-			<&pm660_vadc ADC_AMUX_THM4_PU2>;
-
-	backlight_therm {
-		reg = <ADC_AMUX_THM4_PU2>;
-		qcom,ratiometric;
-		qcom,hw-settle-time = <200>;
-	};
-};
-
 &thermal_zones {
 	backlight_therm {
 		polling-delay-passive = <0>;
-		polling-delay = <5000>;
-		thermal-governor = "step_wise";
+		polling-delay = <0>;
+		thermal-governor = "user_space";
 		thermal-sensors = <&pm660_adc_tm ADC_AMUX_THM4_PU2>;
-		wake-capable-sensor;
 		trips {
 			active-config0 {
 				temperature = <125000>;
@@ -61,13 +57,6 @@
 			};
 		};
 	};
-
-	/delete-node/ ibat-high;
-	/delete-node/ ibat-vhigh;
-	/delete-node/ vbat_adc;
-	/delete-node/ vbat_low;
-	/delete-node/ vbat_too_low;
-	/delete-node/ soc;
 };
 
 &pm660_charger {
@@ -85,7 +74,7 @@
 /* common diff with msm-pm660l.dtsi */
 &pm660l_wled {
 	/delete-property/ qcom,auto-calibration;
-	qcom,fs-current-limit = <18000>;
+	qcom,fs-current-limit = <20000>;
 	qcom,en-cabc;
 	qcom,string-cfg = <3>;
 };

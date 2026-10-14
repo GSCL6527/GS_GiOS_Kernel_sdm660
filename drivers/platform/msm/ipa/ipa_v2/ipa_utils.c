@@ -849,7 +849,7 @@ int ipa2_get_ep_mapping(enum ipa_client_type client)
 		return INVALID_EP_MAPPING_INDEX;
 	}
 
-	if (unlikely(client >= IPA_CLIENT_MAX || client < 0)) {
+	if (client >= IPA_CLIENT_MAX || client < 0) {
 		IPAERR_RL("Bad client number! client =%d\n", client);
 		return INVALID_EP_MAPPING_INDEX;
 	}
@@ -867,7 +867,7 @@ int ipa2_get_ep_mapping(enum ipa_client_type client)
 		break;
 	}
 
-	if (unlikely(!ep_mapping[hw_type_index][client].valid))
+	if (!ep_mapping[hw_type_index][client].valid)
 		return INVALID_EP_MAPPING_INDEX;
 
 	return ep_mapping[hw_type_index][client].pipe_num;
@@ -4332,12 +4332,10 @@ static void ipa_controller_shared_static_bind(struct ipa_controller *ctrl)
 	ctrl->ipa_clk_rate_turbo = IPA_V2_0_CLK_RATE_TURBO;
 	ctrl->ipa_clk_rate_nominal = IPA_V2_0_CLK_RATE_NOMINAL;
 	ctrl->ipa_clk_rate_svs = IPA_V2_0_CLK_RATE_SVS;
-#ifdef CONFIG_DEBUG_FS
 	ctrl->ipa_read_gen_reg = _ipa_read_gen_reg_v2_0;
 	ctrl->ipa_read_ep_reg = _ipa_read_ep_reg_v2_0;
 	ctrl->ipa_write_dbg_cnt = _ipa_write_dbg_cnt_v2_0;
 	ctrl->ipa_read_dbg_cnt = _ipa_read_dbg_cnt_v2_0;
-#endif
 	ctrl->ipa_commit_flt = __ipa_commit_flt_v2;
 	ctrl->ipa_commit_rt = __ipa_commit_rt_v2;
 	ctrl->ipa_commit_hdr = __ipa_commit_hdr_v2;
@@ -4383,12 +4381,10 @@ int ipa_controller_static_bind(struct ipa_controller *ctrl,
 		ctrl->ipa_clk_rate_turbo = IPA_V1_1_CLK_RATE;
 		ctrl->ipa_clk_rate_nominal = IPA_V1_1_CLK_RATE;
 		ctrl->ipa_clk_rate_svs = IPA_V1_1_CLK_RATE;
-#ifdef CONFIG_DEBUG_FS
 		ctrl->ipa_read_gen_reg = _ipa_read_gen_reg_v1_1;
 		ctrl->ipa_read_ep_reg = _ipa_read_ep_reg_v1_1;
 		ctrl->ipa_write_dbg_cnt = _ipa_write_dbg_cnt_v1_1;
 		ctrl->ipa_read_dbg_cnt = _ipa_read_dbg_cnt_v1_1;
-#endif
 		ctrl->ipa_commit_flt = __ipa_commit_flt_v1_1;
 		ctrl->ipa_commit_rt = __ipa_commit_rt_v1_1;
 		ctrl->ipa_commit_hdr = __ipa_commit_hdr_v1_1;

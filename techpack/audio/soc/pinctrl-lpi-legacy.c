@@ -24,7 +24,7 @@
 
 #define LPI_AUTO_SUSPEND_DELAY          100 /* delay in msec */
 
-#define LPI_ADDRESS_SIZE			0x20000
+#define LPI_ADDRESS_SIZE			0xC000
 
 #define LPI_GPIO_REG_VAL_CTL			0x00
 #define LPI_GPIO_REG_DIR_CTL			0x04
@@ -700,7 +700,7 @@ static int lpi_pinctrl_runtime_resume(struct device *dev)
 
 	ret = lpi_get_lpass_core_hw_clk(dev, state);
 	if (ret) {
-		dev_dbg(dev, "%s: unable to get core clk handle %d\n",
+		dev_err(dev, "%s: unable to get core clk handle %d\n",
 			__func__, ret);
 		return 0;
 	}
@@ -723,7 +723,7 @@ static int lpi_pinctrl_runtime_suspend(struct device *dev)
 
 	ret = lpi_get_lpass_core_hw_clk(dev, state);
 	if (ret) {
-		dev_dbg(dev, "%s: unable to get core clk handle %d\n",
+		dev_err(dev, "%s: unable to get core clk handle %d\n",
 			__func__, ret);
 		return 0;
 	}

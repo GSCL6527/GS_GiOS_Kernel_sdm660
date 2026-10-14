@@ -1345,68 +1345,46 @@ config TOUCHSCREEN_SYNAPTICS_DSX
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_dsx.
 
-config TOUCHSCREEN_NVT_A
-	tristate "novatek touchscreens"
-	select TOUCHSCREEN_NT36XXX
-	help
-	  Say Y here if you have a nvt touchscreen.
-	  nvt controllers are multi touch controllers which can
-	  report 5 touches at a time.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called nvt.
-
-config TOUCHSCREEN_NVT_E7S
-	tristate "novatek touchscreens"
-	select TOUCHSCREEN_NT36XXX
-	help
-	  Say Y here if you have a nvt touchscreen.
-	  nvt controllers are multi touch controllers which can
-	  report 5 touches at a time.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called nvt.
-
-config TOUCHSCREEN_NVT_D2S
-	tristate "novatek touchscreens"
-	select TOUCHSCREEN_NT36XXX
-	help
-	  Say Y here if you have a nvt touchscreen.
-	  nvt controllers are multi touch controllers which can
-	  report 5 touches at a time.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called nvt.
-
-config TOUCHSCREEN_NVT_F7A
-	tristate "novatek touchscreens"
-	select TOUCHSCREEN_NT36XXX
-	help
-	  Say Y here if you have a nvt touchscreen.
-	  nvt controllers are multi touch controllers which can
-	  report 5 touches at a time.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called nvt.
-
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+
+config TOUCHSCREEN_SYNAPTICS_TCM
+	bool "Synaptics TCM Touchscreen Driver"
+	depends on I2C
+	default y
+	help
+	  Say Y here if you have a Synaptics Touchscreen.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_tcm.
 
 source "drivers/input/touchscreen/synaptics_tcm/Kconfig"
 
 source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
-source "drivers/input/touchscreen/focal_ft8719/Kconfig"
-
 source "drivers/input/touchscreen/nt36xxx/Kconfig"
 
+source "drivers/input/touchscreen/focal_ft8719_d2t/Kconfig"
+
+source "drivers/input/touchscreen/focal_ft8719_e7t/Kconfig"
+
+source "drivers/input/touchscreen/nvt_touch_a/Kconfig"
+
+source "drivers/input/touchscreen/nvt_touch_d2s/Kconfig"
+
+source "drivers/input/touchscreen/nvt_touch_d2t/Kconfig"
+
+source "drivers/input/touchscreen/nvt_touch_e7s/Kconfig"
+
+source "drivers/input/touchscreen/nvt_touch_f7a/Kconfig"
+
 source "drivers/input/touchscreen/synaptics_dsx_e7s/Kconfig"
+
+source "drivers/input/touchscreen/synaptics_tcm_d2t/Kconfig"
+
+source "drivers/input/touchscreen/synaptics_tcm_f7a/Kconfig"
+
+source "drivers/input/touchscreen/synaptics_dsx_force/Kconfig"
 
 endif

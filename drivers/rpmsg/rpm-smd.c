@@ -29,6 +29,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/rbtree.h>
+#include <linux/suspend.h>
 #include <soc/qcom/rpm-notifier.h>
 #include <soc/qcom/rpm-smd.h>
 #include <linux/rpmsg.h>
@@ -36,7 +37,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_rpm_smd.h>
 
-#define WAIT_FOR_ACK_TIMEOUT		5 * HZ
 #define DEFAULT_BUFFER_SIZE 256
 #define DEBUG_PRINT_BUFFER_SIZE 512
 #define MAX_SLEEP_BUFFER 128
@@ -1372,13 +1372,7 @@ int msm_rpm_wait_for_ack(uint32_t msg_id)
 	if (!elem)
 		return rc;
 
-	rc = wait_for_completion_timeout(&elem->ack, WAIT_FOR_ACK_TIMEOUT);
-	if (rc == 0) {
-		if (elem->errno == 0)
-			elem->errno = -ETIMEDOUT;
-
-		pr_err("Timeout while waiting for ack.\n");
-	}
+	wait_for_completion(&elem->ack);
 	trace_rpm_smd_ack_recvd(0, msg_id, 0xDEADFEED);
 
 	rc = elem->errno;
@@ -1517,6 +1511,23 @@ void msm_rpm_exit_sleep(void)
 }
 EXPORT_SYMBOL(msm_rpm_exit_sleep);
 
+static int rpm_smd_pm_notifier(struct notifier_block *nb, unsigned long event, void *unused)
+{
+	int ret;
+
+	if (event == PM_SUSPEND_PREPARE) {
+		ret = msm_rpm_flush_requests(false);
+		pr_debug("ret = %d\n", ret);
+	}
+
+	/* continue to suspend */
+	return NOTIFY_OK;
+}
+
+static struct notifier_block rpm_smd_pm_nb = {
+	.notifier_call = rpm_smd_pm_notifier,
+};
+
 static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev, void *ptr,
 				int size, void *priv, u32 addr)
 {
@@ -1599,6 +1610,13 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 	rpm = devm_kzalloc(&rpdev->dev, sizeof(*rpm), GFP_KERNEL);
 	if (!rpm) {
 		probe_status = -ENOMEM;
+		goto fail;
+	}
+
+	ret = register_pm_notifier(&rpm_smd_pm_nb);
+	if (ret) {
+		pr_err("%s: power state notif error %d\n", __func__, ret);
+		probe_status = -ENODEV;
 		goto fail;
 	}
 

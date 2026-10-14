@@ -13,7 +13,7 @@
 #ifndef _MSM_ISP_BUF_H_
 #define _MSM_ISP_BUF_H_
 
-#include <media/msmb_isp-legacy.h>
+#include <media/msmb_isp.h>
 #include "msm_sd.h"
 
 /* Buffer type could be userspace / HAL.
@@ -165,8 +165,7 @@ struct msm_isp_buf_ops {
 
 	int (*buf_done)(struct msm_isp_buf_mgr *buf_mgr,
 		uint32_t bufq_handle, uint32_t buf_index,
-		struct timeval *tv, uint32_t frame_id, uint32_t output_format,
-		enum vb2_buffer_state state);
+		struct timeval *tv, uint32_t frame_id, uint32_t output_format);
 	void (*register_ctx)(struct msm_isp_buf_mgr *buf_mgr,
 		struct device **iommu_ctx1, struct device **iommu_ctx2,
 		int num_iommu_ctx1, int num_iommu_ctx2);
@@ -180,6 +179,9 @@ struct msm_isp_buf_ops {
 	int (*buf_divert)(struct msm_isp_buf_mgr *buf_mgr,
 			uint32_t bufq_handle, uint32_t buf_index,
 			struct timeval *tv, uint32_t frame_id);
+	int (*buf_err)(struct msm_isp_buf_mgr *buf_mgr,
+		uint32_t bufq_handle, uint32_t buf_index,
+		struct timeval *tv, uint32_t frame_id, uint32_t output_format);
 };
 
 struct msm_isp_buf_mgr {
