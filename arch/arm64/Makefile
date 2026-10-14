@@ -56,6 +56,9 @@ $(warning Detected assembler with broken .inst; disassembly will be unreliable)
 endif
 
 KBUILD_CFLAGS	+= -mgeneral-regs-only
+# Android-target Clang defaults to a userspace TLS stack canary.  The kernel
+# uses __stack_chk_guard and must never dereference TPIDR_EL0 for this purpose.
+KBUILD_CFLAGS	+= $(call cc-option,-mstack-protector-guard=global)
 KBUILD_CFLAGS	+= $(compat_vdso) $(cc_has_k_constraint)
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
 KBUILD_CFLAGS	+= $(call cc-disable-warning, psabi)

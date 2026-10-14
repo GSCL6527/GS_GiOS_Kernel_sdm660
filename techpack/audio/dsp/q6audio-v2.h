@@ -1,1 +1,1 @@
-..include/dsp/q6audio-v2.h
+../include/dsp/q6audio-v2.h

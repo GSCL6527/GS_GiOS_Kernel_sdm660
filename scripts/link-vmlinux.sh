@@ -319,15 +319,6 @@ if [ ! -z ${RTIC_MPGEN+x} ]; then
 	KBUILD_VMLINUX_LIBS+=$RTIC_MP_O
 fi
 
-# Generate RTIC MP placeholder compile unit of the correct size
-# and add it to the list of link objects
-# this needs to be done before generating kallsyms
-if [ ! -z ${RTIC_MPGEN+x} ]; then
-	rtic_mp vmlinux.o rtic_mp.o .tmp_rtic_mp_sz1 .tmp_rtic_mp1.c
-	KBUILD_VMLINUX_LIBS+=" "
-	KBUILD_VMLINUX_LIBS+=$RTIC_MP_O
-fi
-
 btf_vmlinux_bin_o=""
 if [ -n "${CONFIG_DEBUG_INFO_BTF}" ]; then
 	if gen_btf .tmp_vmlinux.btf .btf.vmlinux.bin.o ; then

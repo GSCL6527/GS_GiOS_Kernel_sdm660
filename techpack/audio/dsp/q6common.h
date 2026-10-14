@@ -1,1 +1,1 @@
-..include/dsp/q6common.h
+../include/dsp/q6common.h

@@ -593,6 +593,12 @@ out_unlock:
 	return error;
 }
 
+int vfs_fchmod(struct file *file, umode_t mode)
+{
+	audit_file(file);
+	return chmod_common(&file->f_path, mode);
+}
+
 int ksys_fchmod(unsigned int fd, umode_t mode)
 {
 	struct fd f = fdget(fd);
@@ -729,6 +735,19 @@ SYSCALL_DEFINE3(lchown, const char __user *, filename, uid_t, user, gid_t, group
 {
 	return do_fchownat(AT_FDCWD, filename, user, group,
 			   AT_SYMLINK_NOFOLLOW);
+}
+
+int vfs_fchown(struct file *file, uid_t user, gid_t group)
+{
+	int error;
+
+	error = mnt_want_write_file(file);
+	if (error)
+		return error;
+	audit_file(file);
+	error = chown_common(&file->f_path, user, group);
+	mnt_drop_write_file(file);
+	return error;
 }
 
 int ksys_fchown(unsigned int fd, uid_t user, gid_t group)
