@@ -134,6 +134,46 @@ static void test_bpf(void)
 	packet[0] = packet[1] = packet[2] = packet[3] = 255;
 	jump[6] = BPF_JMP32_IMM(BPF_JSLT, BPF_REG_1, 0, 2);
 	check("ARM64 signed JMP32 execution", run(jump, COUNT(jump), 1, packet));
+	{
+		static const struct {
+			unsigned char op;
+			unsigned char expected;
+			const char *immediate, *reg;
+		} cases[] = {
+			{ BPF_JEQ, 0, "JMP32 immediate JEQ", "JMP32 register JEQ" },
+			{ BPF_JGT, 1, "JMP32 immediate JGT", "JMP32 register JGT" },
+			{ BPF_JLT, 0, "JMP32 immediate JLT", "JMP32 register JLT" },
+			{ BPF_JGE, 1, "JMP32 immediate JGE", "JMP32 register JGE" },
+			{ BPF_JLE, 0, "JMP32 immediate JLE", "JMP32 register JLE" },
+			{ BPF_JNE, 1, "JMP32 immediate JNE", "JMP32 register JNE" },
+			{ BPF_JSGT, 0, "JMP32 immediate JSGT", "JMP32 register JSGT" },
+			{ BPF_JSLT, 1, "JMP32 immediate JSLT", "JMP32 register JSLT" },
+			{ BPF_JSGE, 0, "JMP32 immediate JSGE", "JMP32 register JSGE" },
+			{ BPF_JSLE, 1, "JMP32 immediate JSLE", "JMP32 register JSLE" },
+			{ BPF_JSET, 1, "JMP32 immediate JSET", "JMP32 register JSET" },
+		};
+		struct bpf_insn matrix[] = {
+			BPF_MOV64_REG(BPF_REG_6, BPF_REG_1),
+			BPF_LD_ABS(BPF_W, 0),
+			BPF_MOV64_REG(BPF_REG_1, BPF_REG_0),
+			BPF_LD_IMM64(BPF_REG_2, 0x100000000ULL),
+			BPF_ALU64_REG(BPF_OR, BPF_REG_1, BPF_REG_2),
+			BPF_LD_IMM64(BPF_REG_3, 0x200000001ULL),
+			BPF_JMP32_IMM(BPF_JEQ, BPF_REG_1, 1, 2),
+			BPF_MOV64_IMM(BPF_REG_0, 0), BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(BPF_REG_0, 1), BPF_EXIT_INSN(),
+		};
+		unsigned int i;
+
+		for (i = 0; i < COUNT(cases); i++) {
+			matrix[8] = BPF_JMP32_IMM(cases[i].op, BPF_REG_1, 1, 2);
+			check(cases[i].immediate,
+			      run(matrix, COUNT(matrix), cases[i].expected, packet));
+			matrix[8] = BPF_JMP32_REG(cases[i].op, BPF_REG_1, BPF_REG_3, 2);
+			check(cases[i].reg,
+			      run(matrix, COUNT(matrix), cases[i].expected, packet));
+		}
+	}
 	check("BPF-to-BPF extra JIT pass", run(subprog, COUNT(subprog), 7, packet));
 	check("ktime_get_boot_ns helper", run(boot_time, COUNT(boot_time), 1, packet));
 
