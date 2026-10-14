@@ -93,17 +93,37 @@ also run on a device with `/dev/kmsg` access.
 
 ## Validation status
 
-Production `Image.gz` and Wayne/Jasmine device trees compiled successfully before
-the runtime test identified the Clang guard problem. ARM64 UAPI `headers_install`,
+Final production `Image.gz` and Wayne/Jasmine device trees built successfully
+with exit status 0 after both runtime-discovered kernel fixes. The build source
+commit is `bfeda0eaafff34a142dd7e98e93fc7bde29c30e9` (kernel code last changed in
+`36fc013e1e1a`); release string: `4.19.325-cip132-st16-LKGeek-perf-gbfeda0eaafff`. ARM64 UAPI `headers_install`,
 `gzip -t`, Wayne device-tree decompilation and `git diff --check` passed. The native
 printk test compiled and skipped execution because this host has no `/dev/kmsg`.
 The corrected VM booted to userspace and all 34 runtime assertions passed
 (`THIRD_UPDATE_RUNTIME_PASS`), including all five log messages. The VM emits
 Qualcomm socinfo/camera warnings because those devices are absent; it reports no
-panic during the successful regression run. Production rebuild after the guard
-correction is running; it must then incorporate the runtime-discovered SELinux
-fix before this integration is complete.
+panic during the successful regression run. Production configuration remains
+`vendor/wayne-oss-perf_defconfig`. Existing compiler warnings and Qualcomm
+vendor-binding dtc warnings remain; this is not a warning-free certification.
 
 No physical Wayne device is connected. QEMU cannot validate Qualcomm drivers,
 Android boot, modem, camera, audio, suspend, charging or device-specific behavior.
 A successful build and virtual regression run do not certify those hardware paths.
+
+## Delivered artifacts
+
+Local build artifacts are retained outside Git tracking in
+`/home/lkdenchin/LKGeek_sdm660/.third-update-artifacts/`:
+`Image.gz`, `sdm660-mtp-wayne.dtb`, `sdm660-mtp-jasmine.dtb`, both configuration
+files, `System.map`, validation logs and `SHA256SUMS`. These are kernel/device-tree
+outputs, not a flashable Android boot image. Packaging must use the device's
+existing boot-image/installer layout.
+
+Final Image.gz SHA-256:
+`028c134d4586e557006afdd2a081502c149af176760cc52f9f1adf0050396a71`.
+Wayne DTB SHA-256:
+`578f2434725c18c1b605c490614d4b644b8c1514f59859d15007b1a3549689d9`.
+
+All source changes and the test report are committed to `third-update`; there
+are no unresolved merge entries. The report-only completion commit does not
+change the tested kernel code.
