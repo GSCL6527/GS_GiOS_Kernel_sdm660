@@ -20,6 +20,12 @@ config ANDROID_BINDER_IPC
 	  Android process, using Binder to identify, invoke and pass arguments
 	  between said processes.
 
+config ANDROID_BINDER_LOGS
+	bool "Retain Binder diagnostic logs"
+	depends on ANDROID_BINDER_IPC && PRINTK
+	help
+	  Keep Binder error messages and debugfs transaction diagnostics.
+
 config ANDROID_BINDERFS
 	bool "Android Binderfs filesystem"
 	depends on ANDROID_BINDER_IPC

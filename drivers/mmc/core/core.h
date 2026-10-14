@@ -34,9 +34,6 @@ struct mmc_bus_ops {
 	int (*shutdown)(struct mmc_host *);
 	int (*hw_reset)(struct mmc_host *);
 	int (*sw_reset)(struct mmc_host *);
-	int (*change_bus_speed)(struct mmc_host *host, unsigned long *freq);
-	int (*change_bus_speed_deferred)(struct mmc_host *host,
-							unsigned long *freq);
 	bool (*cache_enabled)(struct mmc_host *);
 	int (*change_bus_speed)(struct mmc_host *host, unsigned long *freq);
 	int (*change_bus_speed_deferred)(struct mmc_host *host,

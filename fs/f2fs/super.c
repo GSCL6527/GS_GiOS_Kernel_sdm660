@@ -637,7 +637,7 @@ static int f2fs_set_zstd_level(struct f2fs_sb_info *sbi, const char *str)
 	if (kstrtouint(str + 1, 10, &level))
 		return -EINVAL;
 
-	if (!level || level > ZSTD_maxCLevel()) {
+	if (!level || level > zstd_max_clevel()) {
 		f2fs_info(sbi, "invalid zstd compress level: %d", level);
 		return -EINVAL;
 	}
@@ -1787,9 +1787,9 @@ static int f2fs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_fsid    = u64_to_fsid(id);
 
 #ifdef CONFIG_QUOTA
-	if (is_inode_flag_set(d_inode(dentry), FI_PROJ_INHERIT) &&
+	if (is_inode_flag_set(dentry->d_inode, FI_PROJ_INHERIT) &&
 			sb_has_quota_limits_enabled(sb, PRJQUOTA)) {
-		f2fs_statfs_project(sb, F2FS_I(d_inode(dentry))->i_projid, buf);
+		f2fs_statfs_project(sb, F2FS_I(dentry->d_inode)->i_projid, buf);
 	}
 #endif
 	return 0;
@@ -2778,14 +2778,22 @@ int f2fs_quota_sync(struct super_block *sb, int type)
 		 *  f2fs_dquot_commit
 		 *			      block_operation
 		 *			      f2fs_down_read(quota_sem)
+		 *
+		 * However, we cannot use the cp_rwsem to prevent this
+		 * deadlock, as the cp_rwsem is taken for read inside the
+		 * f2fs_dquot_commit code, and rwsem is not recursive.
+		 *
+		 * We therefore use a special lock to synchronize
+		 * f2fs_quota_sync with block_operations, as this is the only
+		 * place where such recursion occurs.
 		 */
-		f2fs_lock_op(sbi);
+		f2fs_down_read(&sbi->cp_quota_rwsem);
 		f2fs_down_read(&sbi->quota_sem);
 
 		ret = f2fs_quota_sync_file(sbi, cnt);
 
 		f2fs_up_read(&sbi->quota_sem);
-		f2fs_unlock_op(sbi);
+		f2fs_up_read(&sbi->cp_quota_rwsem);
 
 		if (!f2fs_sb_has_quota_ino(sbi))
 			inode_unlock(dqopt->files[cnt]);
@@ -4129,6 +4137,7 @@ try_onemore:
 	spin_lock_init(&sbi->stat_lock);
 	init_f2fs_rwsem(&sbi->cp_rwsem);
 	init_f2fs_rwsem(&sbi->quota_sem);
+	init_f2fs_rwsem(&sbi->cp_quota_rwsem);
 	init_waitqueue_head(&sbi->cp_wait);
 	spin_lock_init(&sbi->error_lock);
 
@@ -4449,15 +4458,10 @@ try_onemore:
 	} else {
 		err = f2fs_recover_fsync_data(sbi, true);
 
-		if (err > 0) {
-			if (!f2fs_readonly(sb)) {
-				f2fs_err(sbi, "Need to recover fsync data");
-				err = -EINVAL;
-				goto free_meta;
-			} else {
-				f2fs_info(sbi, "drop all fsynced data");
-				err = 0;
-			}
+		if (!f2fs_readonly(sb) && err > 0) {
+			err = -EINVAL;
+			f2fs_err(sbi, "Need to recover fsync data");
+			goto free_meta;
 		}
 	}
 reset_checkpoint:

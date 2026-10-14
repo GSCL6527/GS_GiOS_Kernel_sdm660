@@ -137,7 +137,6 @@ static u64 __maybe_unused gic_read_iar(void)
 }
 #endif
 
-#ifdef CONFIG_ARM_GIC_V3_NO_ACCESS_CONTROL
 static void gic_enable_redist(bool enable)
 {
 	void __iomem *rbase;
@@ -171,9 +170,6 @@ static void gic_enable_redist(bool enable)
 		pr_err_ratelimited("redistributor failed to %s...\n",
 				   enable ? "wakeup" : "sleep");
 }
-#else
-static void gic_enable_redist(bool enable) { }
-#endif
 
 /*
  * Routines to disable, enable, EOI and route interrupts
@@ -450,10 +446,11 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 {
 	u32 irqnr;
 
-	irqnr = gic_read_iar();
+	do {
+		irqnr = gic_read_iar();
 
-	if (likely(irqnr > 15 && irqnr < 1020) || irqnr >= 8192) {
-		int err;
+		if (likely(irqnr > 15 && irqnr < 1020) || irqnr >= 8192) {
+			int err;
 
 			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 			if (static_branch_likely(&supports_deactivate_key))
@@ -478,40 +475,23 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 		if (irqnr < 16) {
 			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 			gic_write_eoir(irqnr);
-		else
-			isb();
-
-		err = handle_domain_irq(gic_data.domain, irqnr, regs);
-		if (err) {
-			WARN_ONCE(true, "Unexpected interrupt received!\n");
-			log_abnormal_wakeup_reason(
-					"unexpected HW IRQ %u", irqnr);
-			if (static_branch_likely(&supports_deactivate_key)) {
-				if (irqnr < 8192)
-					gic_write_dir(irqnr);
-			} else {
-				gic_write_eoir(irqnr);
-			}
-		}
-		return;
-	}
-	if (irqnr < 16) {
-		gic_write_eoir(irqnr);
-		if (static_branch_likely(&supports_deactivate_key))
-			gic_write_dir(irqnr);
+			if (static_branch_likely(&supports_deactivate_key))
+				gic_write_dir(irqnr);
 #ifdef CONFIG_SMP
-		/*
-		 * Unlike GICv2, we don't need an smp_rmb() here.
-		 * The control dependency from gic_read_iar to
-		 * the ISB in gic_write_eoir is enough to ensure
-		 * that any shared data read by handle_IPI will
-		 * be read after the ACK.
-		 */
-		handle_IPI(irqnr, regs);
+			/*
+			 * Unlike GICv2, we don't need an smp_rmb() here.
+			 * The control dependency from gic_read_iar to
+			 * the ISB in gic_write_eoir is enough to ensure
+			 * that any shared data read by handle_IPI will
+			 * be read after the ACK.
+			 */
+			handle_IPI(irqnr, regs);
 #else
-		WARN_ONCE(true, "Unexpected SGI received!\n");
+			WARN_ONCE(true, "Unexpected SGI received!\n");
 #endif
-	}
+			continue;
+		}
+	} while (irqnr != ICC_IAR1_EL1_SPURIOUS);
 }
 
 static void __init gic_dist_init(void)
@@ -853,6 +833,7 @@ static void gic_send_sgi(u64 cluster_id, u16 tlist, unsigned int irq)
 	       MPIDR_TO_SGI_RS(cluster_id)		|
 	       tlist << ICC_SGI1R_TARGET_LIST_SHIFT);
 
+	pr_devel("CPU%d: ICC_SGI1R_EL1 %llx\n", smp_processor_id(), val);
 	gic_write_sgi1r(val);
 }
 
@@ -881,7 +862,7 @@ static void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 	isb();
 }
 
-static void __init gic_smp_init(void)
+static void gic_smp_init(void)
 {
 	set_smp_cross_call(gic_raise_softirq);
 	cpuhp_setup_state_nocalls(CPUHP_AP_IRQ_GIC_STARTING,
@@ -1224,6 +1205,7 @@ static int __init gic_init_bases(void __iomem *dist_base,
 
 	gic_data.domain = irq_domain_create_tree(handle, &gic_irq_domain_ops,
 						 &gic_data);
+	irq_domain_update_bus_token(gic_data.domain, DOMAIN_BUS_WIRED);
 	gic_data.rdists.rdist = alloc_percpu(typeof(*gic_data.rdists.rdist));
 	gic_data.rdists.has_vlpis = true;
 	gic_data.rdists.has_direct_lpi = true;
@@ -1232,8 +1214,6 @@ static int __init gic_init_bases(void __iomem *dist_base,
 		err = -ENOMEM;
 		goto out_free;
 	}
-
-	irq_domain_update_bus_token(gic_data.domain, DOMAIN_BUS_WIRED);
 
 	gic_data.has_rss = !!(typer & GICD_TYPER_RSS);
 	pr_info("Distributor has %sRange Selector support\n",

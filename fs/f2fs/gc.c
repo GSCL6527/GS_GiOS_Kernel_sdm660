@@ -15,6 +15,7 @@
 #include <linux/freezer.h>
 #include <linux/sched/signal.h>
 #include <linux/random.h>
+#include <uapi/linux/sched/types.h>
 
 #include "f2fs.h"
 #include "node.h"
@@ -200,6 +201,9 @@ int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 		sbi->gc_thread = NULL;
 		return err;
 	}
+	sched_setscheduler(sbi->gc_thread->f2fs_gc_task, SCHED_IDLE, &param);
+	set_task_ioprio(sbi->gc_thread->f2fs_gc_task,
+			IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0));
 
 	return 0;
 }
@@ -1339,13 +1343,8 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	set_summary(&sum, dn.nid, dn.ofs_in_node, ni.version);
 
 	/* allocate block address */
-	err = f2fs_allocate_data_block(fio.sbi, NULL, fio.old_blkaddr, &newaddr,
+	f2fs_allocate_data_block(fio.sbi, NULL, fio.old_blkaddr, &newaddr,
 				&sum, type, NULL);
-	if (err) {
-		f2fs_put_page(mpage, 1);
-		/* filesystem should shutdown, no need to recovery block */
-		goto up_out;
-	}
 
 	fio.encrypted_page = f2fs_pagecache_get_page(META_MAPPING(fio.sbi),
 				newaddr, FGP_LOCK | FGP_CREAT, GFP_NOFS);

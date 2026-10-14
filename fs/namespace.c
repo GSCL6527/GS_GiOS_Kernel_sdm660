@@ -32,6 +32,7 @@
 #include "internal.h"
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#include <linux/susfs_def.h>
 extern bool susfs_is_current_ksu_domain(void);
 extern struct static_key_false susfs_set_sdcard_android_data_decrypted_key_false;
 

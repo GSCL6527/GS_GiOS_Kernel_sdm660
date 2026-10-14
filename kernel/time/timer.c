@@ -1301,6 +1301,7 @@ EXPORT_SYMBOL(try_to_del_timer_sync);
  */
 int del_timer_sync(struct timer_list *timer)
 {
+	int ret;
 #ifdef CONFIG_LOCKDEP
 	unsigned long flags;
 
@@ -1323,7 +1324,6 @@ int del_timer_sync(struct timer_list *timer)
 		ret = try_to_del_timer_sync(timer);
 
 		if (unlikely(ret < 0)) {
-			del_timer_wait_running(timer);
 			cpu_relax();
 			ndelay(TIMER_LOCK_TIGHT_LOOP_DELAY_NS);
 		}

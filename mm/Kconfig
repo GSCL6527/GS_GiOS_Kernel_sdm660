@@ -936,3 +936,30 @@ config MEMFD_ASHMEM_SHIM
 	  now memfds passed to them.
 
 	  Unless you are running Android, say N.
+
+config ZSMALLOC_CHAIN_SIZE
+	int "Maximum number of physical pages per-zspage"
+	default 8
+	range 4 16
+	depends on ZSMALLOC
+	help
+	  This option sets the upper limit on the number of physical pages
+	  that a zmalloc page (zspage) can consist of. The optimal zspage
+	  chain size is calculated for each size class during the
+	  initialization of the pool.
+
+	  Changing this option can alter the characteristics of size classes,
+	  such as the number of pages per zspage and the number of objects
+	  per zspage. This can also result in different configurations of
+	  the pool, as zsmalloc merges size classes with similar
+	  characteristics.
+
+	  For more information, see zsmalloc documentation.
+
+config VM_MAX_READAHEAD
+	int "default max readahead window size"
+	default 128
+	help
+	 This sets the VM_MAX_READAHEAD value to allow the readahead window
+	 to grow to a maximum size of configured. This will benefit sequential
+	 read throughput and thus early boot performance.

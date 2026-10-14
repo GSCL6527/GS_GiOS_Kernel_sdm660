@@ -101,54 +101,6 @@ TRACE_EVENT(sched_enq_deq_task,
 );
 
 /*
- * Tracepoint for task enqueue/dequeue:
- */
-TRACE_EVENT(sched_enq_deq_task,
-
-	TP_PROTO(struct task_struct *p, bool enqueue,
-				unsigned int cpus_allowed),
-
-	TP_ARGS(p, enqueue, cpus_allowed),
-
-	TP_STRUCT__entry(
-		__array(char,		comm, TASK_COMM_LEN)
-		__field(pid_t,		pid)
-		__field(int,		prio)
-		__field(int,		cpu)
-		__field(bool,		enqueue)
-		__field(unsigned int,	nr_running)
-		__field(unsigned long,	cpu_load)
-		__field(unsigned int,	rt_nr_running)
-		__field(unsigned int,	cpus_allowed)
-		__field(unsigned int,	demand)
-		__field(unsigned int,	pred_demand)
-	),
-
-	TP_fast_assign(
-		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
-		__entry->pid		= p->pid;
-		__entry->prio		= p->prio;
-		__entry->cpu		= task_cpu(p);
-		__entry->enqueue	= enqueue;
-		__entry->nr_running	= task_rq(p)->nr_running;
-		__entry->cpu_load	= task_rq(p)->cpu_load[0];
-		__entry->rt_nr_running	= task_rq(p)->rt.rt_nr_running;
-		__entry->cpus_allowed	= cpus_allowed;
-		__entry->demand		= task_load(p);
-		__entry->pred_demand	= task_pl(p);
-	),
-
-	TP_printk("cpu=%d %s comm=%s pid=%d prio=%d nr_running=%u cpu_load=%lu rt_nr_running=%u affine=%x demand=%u pred_demand=%u",
-			__entry->cpu,
-			__entry->enqueue ? "enqueue" : "dequeue",
-			__entry->comm, __entry->pid,
-			__entry->prio, __entry->nr_running,
-			__entry->cpu_load, __entry->rt_nr_running,
-			__entry->cpus_allowed, __entry->demand,
-			__entry->pred_demand)
-);
-
-/*
  * Tracepoint for waking up a task:
  */
 DECLARE_EVENT_CLASS(sched_wakeup_template,
@@ -1763,6 +1715,28 @@ TRACE_EVENT(sched_isolate,
 
 #include "walt.h"
 #endif /* CONFIG_SMP */
+TRACE_EVENT(sched_capacity_update,
+
+	TP_PROTO(int cpu),
+
+	TP_ARGS(cpu),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, cpu)
+		__field(unsigned int, capacity)
+		__field(unsigned int, capacity_orig)
+	),
+
+	TP_fast_assign(
+		__entry->cpu			= cpu;
+		__entry->capacity		= capacity_of(cpu);
+		__entry->capacity_orig		= capacity_orig_of(cpu);
+	),
+
+	TP_printk("cpu=%d capacity=%u capacity_orig=%u",
+		__entry->cpu, __entry->capacity, __entry->capacity_orig)
+);
+
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */

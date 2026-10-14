@@ -2952,7 +2952,7 @@ int adreno_dispatcher_idle(struct adreno_device *adreno_dev)
 	 * mutex is held and device is started
 	 */
 	if (mutex_is_locked(&dispatcher->mutex) &&
-		(__mutex_owner(&dispatcher->mutex) == current))
+		((struct task_struct *)(atomic_long_read(&dispatcher->mutex.owner) & ~0x7UL) == current))
 		return -EDEADLK;
 
 	adreno_get_gpu_halt(adreno_dev);

@@ -122,6 +122,7 @@ extern int __alloc_fd(struct files_struct *files,
 		      unsigned start, unsigned end, unsigned flags);
 extern void __fd_install(struct files_struct *files,
 		      unsigned int fd, struct file *file);
+extern int close_fd_get_file(unsigned int fd, struct file **res);
 extern int __close_fd(struct files_struct *files,
 		      unsigned int fd);
 extern int __close_range(unsigned int fd, unsigned int max_fd, unsigned int flags);

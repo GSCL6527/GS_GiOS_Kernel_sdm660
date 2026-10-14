@@ -19,6 +19,7 @@
 
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
+#include "../misc/kprofiles/kprofiles.h"
 #include <linux/cpufreq_times.h>
 #include <linux/delay.h>
 #include <linux/device.h>

@@ -144,9 +144,6 @@ static void avc_dump_av(struct audit_buffer *ab, u16 tclass, u32 av)
 		return;
 	}
 
-#ifdef CONFIG_KSU_SUSFS
-audit_class:
-#endif
 	BUG_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map));
 	perms = secclass_map[tclass-1].perms;
 
@@ -212,6 +209,9 @@ static void avc_dump_query(struct audit_buffer *ab, struct selinux_state *state,
 		kfree(scontext);
 	}
 
+#ifdef CONFIG_KSU_SUSFS
+audit_class:
+#endif
 	BUG_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map));
 	audit_log_format(ab, " tclass=%s", secclass_map[tclass-1].name);
 }

@@ -142,18 +142,12 @@ static void thermal_zone_trip_update(struct thermal_zone_device *tz, int trip)
 	bool throttle = false;
 	int old_target;
 
-	if (trip == THERMAL_TRIPS_NONE) {
-		hyst_temp = trip_temp = tz->forced_passive;
-		trip_type = THERMAL_TRIPS_NONE;
+	tz->ops->get_trip_temp(tz, trip, &trip_temp);
+	if (tz->ops->get_trip_hyst) {
+		tz->ops->get_trip_hyst(tz, trip, &hyst_temp);
+		hyst_temp = trip_temp - hyst_temp;
 	} else {
-		tz->ops->get_trip_temp(tz, trip, &trip_temp);
-		if (tz->ops->get_trip_hyst) {
-			tz->ops->get_trip_hyst(tz, trip, &hyst_temp);
-			hyst_temp = trip_temp - hyst_temp;
-		} else {
-			hyst_temp = trip_temp;
-		}
-		tz->ops->get_trip_type(tz, trip, &trip_type);
+		hyst_temp = trip_temp;
 	}
 	tz->ops->get_trip_type(tz, trip, &trip_type);
 

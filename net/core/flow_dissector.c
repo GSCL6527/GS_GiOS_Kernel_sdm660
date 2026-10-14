@@ -814,7 +814,6 @@ bool __skb_flow_dissect(const struct net *net,
 	struct flow_dissector_key_vlan *key_vlan;
 	enum flow_dissect_ret fdret;
 	enum flow_dissector_key_id dissector_vlan = FLOW_DISSECTOR_KEY_MAX;
-	struct bpf_prog *attached;
 	int num_hdrs = 0;
 	u8 ip_proto = 0;
 	bool ret;
@@ -854,37 +853,6 @@ bool __skb_flow_dissect(const struct net *net,
 	key_basic = skb_flow_dissector_target(flow_dissector,
 					      FLOW_DISSECTOR_KEY_BASIC,
 					      target_container);
-	rcu_read_lock();
-	attached = skb ? rcu_dereference(dev_net(skb->dev)->flow_dissector_prog)
-		       : NULL;
-	if (attached) {
-		/* Note that even though the const qualifier is discarded
-		 * throughout the execution of the BPF program, all changes(the
-		 * control block) are reverted after the BPF program returns.
-		 * Therefore, __skb_flow_dissect does not alter the skb.
-		 */
-		struct bpf_flow_keys flow_keys = {};
-		struct bpf_skb_data_end cb_saved;
-		struct bpf_skb_data_end *cb;
-		u32 result;
-		cb = (struct bpf_skb_data_end *)skb->cb;
-		/* Save Control Block */
-		memcpy(&cb_saved, cb, sizeof(cb_saved));
-		memset(cb, 0, sizeof(cb_saved));
-		/* Pass parameters to the BPF program */
-		cb->qdisc_cb.flow_keys = &flow_keys;
-		flow_keys.nhoff = nhoff;
-		bpf_compute_data_pointers((struct sk_buff *)skb);
-		result = BPF_PROG_RUN(attached, skb);
-		/* Restore state */
-		memcpy(cb, &cb_saved, sizeof(cb_saved));
-		__skb_flow_bpf_to_target(&flow_keys, flow_dissector,
-					 target_container);
-		key_control->thoff = min_t(u16, key_control->thoff, skb->len);
-		rcu_read_unlock();
-		return result == BPF_OK;
-	}
-	rcu_read_unlock();
 
 	if (skb) {
 		if (!net) {

@@ -168,19 +168,4 @@ struct btf_var_secinfo {
 	__u32	size;
 };
 
-/* If the struct/union type info kind_flag is set, the
- * following two macros are used to access bitfield_size
- * and bit_offset from btf_member.offset.
- */
-#define BTF_MEMBER_BITFIELD_SIZE(val)	((val) >> 24)
-#define BTF_MEMBER_BIT_OFFSET(val)	((val) & 0xffffff)
-
-/* BTF_KIND_FUNC_PROTO is followed by multiple "struct btf_param".
- * The exact number of btf_param is stored in the vlen (of the
- * info in "struct btf_type").
- */
-struct btf_param {
-	__u32	name_off;
-	__u32	type;
-};
 #endif /* _UAPI__LINUX_BTF_H__ */
