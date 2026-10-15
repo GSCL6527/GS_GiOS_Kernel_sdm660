@@ -3762,14 +3762,16 @@ static void sched_update_updown_migrate_values(bool up)
 		 * if there are more than 2 clusters in the system
 		 */
 		for_each_sched_cluster(cluster) {
+			int margin_index = min(i, MAX_MARGIN_LEVELS - 1);
+
 			for_each_cpu(cpu, &cluster->cpus) {
 
 				if (up)
 					sched_capacity_margin_up[cpu] =
-					sysctl_sched_capacity_margin_up[i];
+						sysctl_sched_capacity_margin_up[margin_index];
 				else
 					sched_capacity_margin_down[cpu] =
-					sysctl_sched_capacity_margin_down[i];
+						sysctl_sched_capacity_margin_down[margin_index];
 			}
 
 			if (++i >= cap_margin_levels)
@@ -3795,7 +3797,7 @@ int sched_updown_migrate_handler(struct ctl_table *table, int write,
 	unsigned int *data = (unsigned int *)table->data;
 	unsigned int *old_val;
 	static DEFINE_MUTEX(mutex);
-	int cap_margin_levels = num_sched_clusters ? num_sched_clusters - 1 : 0;
+	int cap_margin_levels = min(num_sched_clusters - 1, MAX_MARGIN_LEVELS);
 
 	if (cap_margin_levels <= 0)
 		return -EINVAL;
