@@ -988,7 +988,6 @@ int __video_register_device(struct video_device *vdev,
 	/* Increase v4l2_device refcount */
 	v4l2_device_get(vdev->v4l2_dev);
 
-	mutex_lock(&videodev_lock);
 	ret = device_register(&vdev->dev);
 	if (ret < 0) {
 		pr_err("%s: device_register failed\n", __func__);
