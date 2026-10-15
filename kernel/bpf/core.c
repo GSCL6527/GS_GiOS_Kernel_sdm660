@@ -860,6 +860,11 @@ void bpf_jit_uncharge_modmem(u32 pages)
 	atomic_long_sub(pages, &bpf_jit_current);
 }
 
+/* Architectures with a module-independent JIT provide their own allocator.
+ * Keep the module-backed fallback out of !MODULES objects: non-LTO links
+ * retain its relocations even when an architecture overrides the weak symbol.
+ */
+#ifdef CONFIG_MODULES
 void *__weak bpf_jit_alloc_exec(unsigned long size)
 {
 	return module_alloc(size);
@@ -869,6 +874,7 @@ void __weak bpf_jit_free_exec(void *addr)
 {
 	module_memfree(addr);
 }
+#endif
 
 struct bpf_binary_header *
 bpf_jit_binary_alloc(unsigned int proglen, u8 **image_ptr,
