@@ -34,3 +34,7 @@
 内置 WLAN 驱动此前只创建控制字符设备，ROM 却尝试插入不存在的 wlan.ko。恢复 CONFIG_QCA_CLD_WLAN=y 时主动加载，保留模块构建的延迟控制方式与加载失败清理。旧内核原有主动加载行为。
 
 相机 HAL 调试日志明确要求 CPP 实体类型 0x10f09，而实际实体类型统一为 0x20000，group_id 为 9。MSM_CAMERA_SUBDEV_BASE 为 0x10f00。在 Qualcomm 相机子设备注册前设置 function = BASE + group_id，恢复此 HAL 所需的枚举协议，仅作用于 camera_v2 注册路径。该项不是修改全局媒体枚举行为。需在新镜像验证传感器探测及前后摄，不能仅凭静态核查列为通过。
+
+### 相机修复进一步核查
+
+首次实体类型补丁使 HAL 开始传感器探测，但仍报告 power_setting size_up=0。进一步确认 Wayne defconfig 本来指定 MSMB_CAMERA_OSS=y，上游合并却删除了对应 Kconfig 和 Makefile 分流，构建时静默丢弃该选项并改用通用 camera_v2，造成整套 ABI 不匹配。最终方案恢复 OSS 选项、对应 Makefile 和 Kconfig 路由，移除临时通用实体类型补丁；改用仓库原有 camera_v2-oss 驱动和专用头文件。此版本仍需构建与实际相机测试。
