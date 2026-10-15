@@ -16,6 +16,19 @@ phone. These observations narrow the investigation but do not prove the cause.
 
 ## Confirmed source issues corrected
 
+0. **Wayne first-stage mounts removed.** The imported
+   xiaomi-sdm660-common.dtsi deletes /firmware/android/fstab. The original Wayne
+   tree supplied both system and vendor there with read-only ext4 mounts and
+   `wait`, without slotselect/AVB. The inspected installed boot ramdisk contains
+   init and installer extras, with no fstab of its own. The supplied Recovery
+   fstab explicitly documents that system/vendor are early-mounted from the DT,
+   and its log identifies static system/vendor partitions (mmcblk0p61/p62).
+   Restore the complete original mount contract in wayne.dtsi, after the common
+   deletion. This is the strongest concrete compatibility explanation found for
+   failure before Android userspace comes up. Jasmine and other devices retain
+   their imported mount policy; no verity settings or partitions are modified.
+   Device boot confirmation is still required.
+
 1. **GICv3 firmware access policy.** The import removed the original
    ARM_GIC_V3_NO_ACCESS_CONTROL switch and unconditionally accessed GICR_WAKER.
    Wayne has GICv3 access control enabled; its previous configuration left the
