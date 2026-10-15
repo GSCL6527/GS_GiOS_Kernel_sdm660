@@ -21,6 +21,7 @@
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/anon_inodes.h>
 #include <linux/sync_file.h>
@@ -448,7 +449,31 @@ static long sync_file_ioctl(struct file *file, unsigned int cmd,
 	}
 }
 
+#ifdef CONFIG_PROC_FS
+static void sync_file_show_fdinfo(struct seq_file *m, struct file *file)
+{
+	struct sync_file *sync_file = file->private_data;
+	struct dma_fence **fences;
+	int i, num_fences;
+
+	fences = get_fences(sync_file, &num_fences);
+	seq_printf(m, "sync_status:\t%d\n", dma_fence_get_status(sync_file->fence));
+	for (i = 0; i < num_fences; i++) {
+		struct dma_fence *fence = fences[i];
+
+		seq_printf(m, "sync_fence:\t%s %s context=%llu seqno=%u status=%d\n",
+			fence->ops->get_driver_name(fence),
+			fence->ops->get_timeline_name(fence),
+			(unsigned long long)fence->context, fence->seqno,
+			dma_fence_get_status(fence));
+	}
+}
+#endif
+
 static const struct file_operations sync_file_fops = {
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo = sync_file_show_fdinfo,
+#endif
 	.release = sync_file_release,
 	.poll = sync_file_poll,
 	.unlocked_ioctl = sync_file_ioctl,
