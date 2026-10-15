@@ -8,9 +8,13 @@ headers=$(realpath "${2:?headers_install include directory required}")
 mkdir -p "${3:?output directory required}"
 output=$(realpath "$3")
 source_dir=$(cd "$(dirname "$0")" && pwd)
+ksu_flags=()
+if [[ ${KSU_TEST:-0} == 1 ]]; then
+	ksu_flags=(-DTHIRD_UPDATE_KSU_RUNTIME "-I$source_dir/../../../../KernelSU/kernel/include")
+fi
 "${CC:-clang}" --target=aarch64-linux-gnu -O2 -Wall -Wextra \
 	-ffreestanding -fno-builtin -fno-stack-protector -nostdlib -static \
-	-fuse-ld=lld -Wl,-e,_start -I"$headers" \
+	-fuse-ld=lld -Wl,-e,_start -I"$headers" "${ksu_flags[@]}" \
 	"$source_dir/third_update_vm_init.c" -o "$output/init"
 python3 - "$output" <<'PY'
 import gzip

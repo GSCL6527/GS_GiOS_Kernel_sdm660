@@ -1,0 +1,30 @@
+LKGeek KernelSU compatibility overlay
+====================================
+
+Upstream source remains the pristine KernelSU submodule, pinned to
+ReSukiSU/ReSukiSU d7260ca1e5c128061122924d0d48754e361e135c.
+Its current project name is BakaSU. Initialize it with git submodule update
+--init KernelSU before building. Do not edit the upstream checkout.
+
+This directory replaces the former single symlink with links to upstream
+files/directories and three small source overlays:
+
+* Kbuild: resolves metadata from the real submodule and selects our reviewed
+  SUSFS 2.1/4.19 compatibility checks instead of upstream's blanket SUSFS stop.
+  All upstream inline-hook, API and symbol checks remain enabled.
+* feature/sucompat.c and .h: keep the user-path stat/access ABI on kernels
+  below 5.0; the rest of these files is the pinned upstream code.
+* susfs_compat.mk: preserves upstream feature detection and requires the
+  kernel-side SUSFS_BAKASU_LEGACY_COMPAT contract.
+
+The kernel-side contract adds NO_SU and zygote-next task flags, deferred
+sus-path refresh work, and a post-exec callback to install the scoped su
+session descriptor. The exec marker is consumed on success and cleared on
+failure. SELinux symbols needed by the new feature are visible to built-in
+KSU without requiring DEBUG_KERNEL/KALLSYMS_ALL.
+
+On future upstream upgrades, refresh the three copied files from the new
+pin and reapply/review these differences; add any new feature-file links.
+Check every symlink and rerun the Wayne build and KSU_TEST=1 VM suite.
+This overlay is a local legacy adaptation, not a claim of upstream SUSFS
+support or Android/device-level root validation.

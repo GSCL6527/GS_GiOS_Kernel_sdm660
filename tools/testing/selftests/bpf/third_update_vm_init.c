@@ -2,6 +2,10 @@
 /* Freestanding ARM64 /init for the third-update QEMU regression run. */
 #include <linux/bpf.h>
 #include <linux/btf.h>
+#ifdef THIRD_UPDATE_KSU_RUNTIME
+#include <stdbool.h>
+#include "uapi/supercall.h"
+#endif
 #include "../../../include/linux/filter.h"
 
 #define COUNT(a) (sizeof(a) / sizeof((a)[0]))
@@ -44,6 +48,22 @@ static void say(const char *s)
 	call(64, 1, (long)s, length(s), 0, 0, 0);
 }
 
+static void say_error(long error)
+{
+	char digits[24];
+	unsigned long value = error < 0 ? -error : error;
+	unsigned int n = sizeof(digits);
+
+	digits[--n] = 0;
+	do {
+		digits[--n] = '0' + value % 10;
+		value /= 10;
+	} while (value);
+	say(error < 0 ? "syscall error: -" : "syscall result: ");
+	say(digits + n);
+	say("\n");
+}
+
 static void check(const char *name, int ok)
 {
 	say(ok ? "PASS: " : "FAIL: ");
@@ -81,6 +101,7 @@ static int run(const struct bpf_insn *insns, unsigned int count,
 	a.log_level = 1;
 	fd = bpf(BPF_PROG_LOAD, &a);
 	if (fd < 0) {
+		say_error(fd);
 		say(verifier_log);
 		return 0;
 	}
@@ -301,6 +322,43 @@ static int contains(const char *s, const char *needle)
 	return 0;
 }
 
+#ifdef THIRD_UPDATE_KSU_RUNTIME
+static void test_ksu(void)
+{
+	struct ksu_get_info_cmd info = {};
+	struct ksu_get_full_version_cmd version = {};
+	/* SUSFS 2.1 query ABI from include/linux/susfs.h. */
+	struct { char version[16]; int error; } susfs = { .error = -1 };
+	unsigned long stat_buffer[32] = {};
+	int fd = -1;
+	long result;
+
+	/* The ordinary reboot syscall rejects this magic after the KSU hook
+	 * has returned the driver descriptor through the user pointer. */
+	call(142, KSU_INSTALL_MAGIC1, KSU_INSTALL_MAGIC2, 0, (long)&fd, 0, 0);
+	check("KSU reboot hook installs driver descriptor", fd >= 0);
+	result = call(29, fd, KSU_IOCTL_GET_INFO, (long)&info, 0, 0, 0);
+	check("KSU current UAPI version query", result == 0 &&
+	      info.version > 30000 && info.uapi_version == KERNEL_SU_UAPI_VERSION);
+	result = call(29, fd, KSU_IOCTL_GET_FULL_VERSION, (long)&version, 0, 0, 0);
+	check("KSU pinned upstream version query", result == 0 &&
+	      contains(version.version_full, "d7260ca1"));
+	if (result == 0) {
+		say("KSU version: ");
+		say(version.version_full);
+		say("\n");
+	}
+	close_fd(fd);
+	call(142, KSU_INSTALL_MAGIC1, 0xfafafafa, 0x555e1, (long)&susfs, 0, 0);
+	check("SUSFS legacy version query", susfs.error == 0 &&
+	      contains(susfs.version, "v2.1.0"));
+	check("KSU legacy access hook", call(48, -100, (long)"/proc/version",
+					    4, 0, 0, 0) == 0);
+	check("KSU legacy stat hook", call(79, -100, (long)"/proc/version",
+					  (long)stat_buffer, 0, 0, 0) == 0);
+}
+#endif
+
 static void test_kmsg(void)
 {
 	const char *messages[] = {
@@ -339,6 +397,9 @@ static void test_kmsg(void)
 
 void _start(void)
 {
+	struct { unsigned long current, maximum; } memlock = {
+		16UL * 1024 * 1024, 16UL * 1024 * 1024
+	};
 	if (call(172, 0, 0, 0, 0, 0, 0) != 1) {
 		say("This test must run as /init in an isolated ARM64 VM.\n");
 		call(93, 1, 0, 0, 0, 0, 0);
@@ -348,9 +409,16 @@ void _start(void)
 	call(40, (long)"devtmpfs", (long)"/dev", (long)"devtmpfs", 0, 0, 0);
 	call(40, (long)"proc", (long)"/proc", (long)"proc", 0, 0, 0);
 	say("third-update ARM64 runtime regressions\n");
+	/* Closed programs release their charge after an RCU grace period;
+	 * a rapid test batch must not depend on the default 64 KiB limit. */
+	check("BPF batch memlock budget",
+	      call(261, 0, 8, (long)&memlock, 0, 0, 0) == 0);
 	test_bpf();
 	test_btf();
 	test_cgroup();
+#ifdef THIRD_UPDATE_KSU_RUNTIME
+	test_ksu();
+#endif
 	test_kmsg();
 	say(failures ? "THIRD_UPDATE_RUNTIME_FAIL\n" : "THIRD_UPDATE_RUNTIME_PASS\n");
 	call(142, 0xfee1dead, 672274793, 0x4321fedc, 0, 0, 0);

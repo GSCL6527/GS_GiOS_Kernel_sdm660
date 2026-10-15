@@ -1735,6 +1735,10 @@ static int exec_binprm(struct linux_binprm *bprm)
  */
 extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 			void *envp, int *flags);
+#ifdef CONFIG_KSU_SUSFS
+extern int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
+			void *argv, void *envp, int *flags, int *retval);
+#endif
 static int __do_execve_file(int fd, struct filename *filename,
 			    struct user_arg_ptr argv,
 			    struct user_arg_ptr envp,
@@ -1747,7 +1751,11 @@ static int __do_execve_file(int fd, struct filename *filename,
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
-	(void)ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+#ifdef CONFIG_KSU_SUSFS
+	clear_thread_flag(TIF_PROC_IN_KSU_EXECVE);
+#endif
+	if (filename)
+		(void)ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -1861,6 +1869,13 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = exec_binprm(&bprm);
 	if (retval < 0)
 		goto out;
+#ifdef CONFIG_KSU_SUSFS
+	if (test_thread_flag(TIF_PROC_IN_KSU_EXECVE)) {
+		(void)ksu_handle_post_execveat_sucompat(&fd, &filename, &argv,
+						     &envp, &flags, &retval);
+		clear_thread_flag(TIF_PROC_IN_KSU_EXECVE);
+	}
+#endif
 
 	if (is_global_init(current->parent)) {
 		if (unlikely(!strcmp(filename->name, ZYGOTE32_BIN)))
@@ -1901,6 +1916,9 @@ out_free:
 	if (displaced)
 		reset_files_struct(displaced);
 out_ret:
+#ifdef CONFIG_KSU_SUSFS
+	clear_thread_flag(TIF_PROC_IN_KSU_EXECVE);
+#endif
 	if (filename)
 		putname(filename);
 	return retval;
