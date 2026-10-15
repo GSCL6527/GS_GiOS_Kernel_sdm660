@@ -36,5 +36,27 @@ This diagnostic reset-policy change is not part of the production source fix.
 ## Validation status
 
 Source lock and lifetime paths reviewed; git diff --check passes. Production
-vendor/wayne-oss-perf_defconfig rebuild and real-device boot verification are in
-progress. Earlier successful QEMU checks do not establish successful phone boot.
+vendor/wayne-oss-perf_defconfig Image.gz and DTBs rebuilt successfully; gzip
+decompression matches Image. A temporary boot with all media drivers enabled
+and no initcall blacklist reaches the second screen according to the user,
+where earlier boots stopped at the first logo. The device then loops in the Android boot animation. Android ADB and full
+system boot are not yet confirmed. Earlier successful QEMU checks do not establish successful
+phone boot.
+
+
+## Subsequent Android watchdog
+
+The fixed kernel completes VIDC and camera initcalls and runs Android for more
+than 240 seconds without a captured kernel panic. The recovered system_server
+ANR reports its main thread waiting on the ActivityManagerService lock held by
+thread 290. That thread is waiting in LmkdConnection.waitForConnection while
+applying OOM adjustments. Init logs show lmkd repeatedly exiting with status 0.
+The installed lmkd binary contains PSI and vmpressure monitor support and an
+explicit error for kernels without either pressure events or an in-kernel LMK.
+
+The production Wayne config has both PSI and MEMCG disabled. Enable PSI with its
+normal enabled-at-boot default, MEMCG and swap accounting so Android has pressure
+monitoring and per-process memory control interfaces. This addresses a concrete
+missing interface; the watchdog's disappearance and complete phone boot still
+require a fresh device test. The old kernel's extracted IKCONFIG was inaccurate
+and is not used to infer that these features were absent in the working kernel.
