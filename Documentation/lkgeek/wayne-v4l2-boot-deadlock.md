@@ -60,3 +60,12 @@ monitoring and per-process memory control interfaces. This addresses a concrete
 missing interface; the watchdog's disappearance and complete phone boot still
 require a fresh device test. The old kernel's extracted IKCONFIG was inaccurate
 and is not used to infer that these features were absent in the working kernel.
+
+
+Enabling MEMCG_KMEM (selected by MEMCG) exposed a latent compile failure in the
+local shrinker implementation: memcg IDR/map paths still use shrinker_rwsem,
+but its declaration had been removed in favor of global shrinker-list locks.
+Restore a separate rwsem for memcg IDR/map allocation, registration, removal and
+reclaim. Publish the initialized shrinker into the IDR under that same write
+lock, outside the global list spinlock. This keeps sleeping lock operations out
+of atomic sections and serializes publication against memcg reclaim/removal.
