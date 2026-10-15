@@ -39,7 +39,26 @@ This preserves callback self-requeue and duplicate queue rejection semantics.
 
 ## Validation
 
-Production Image.gz and DTB build and device verification are in progress. A
-functional desktop, unlock, suspend/resume and repeated graphics activity must be
-checked after this fix. Earlier lockscreen/boot_completed observations alone
-are insufficient to declare success.
+Production vendor/wayne-oss-perf_defconfig Image.gz and DTBs build successfully.
+Decompression matches Image and the embedded IKCONFIG matches the actual build
+configuration. With the fixed diagnostic kernel, Android reports boot_completed,
+SurfaceFlinger returns a complete state dump, and GPU queued/consumed/retired
+timestamps progress together. The user confirmed unlock, Settings, home and
+screen off/on no longer blank or hang. The user still reports severe stutter and
+latency; responsiveness is not considered resolved.
+
+A short Settings scrolling sample reported 6 janky frames out of 101 (5.94%). A
+separate temporary boost/rate-limit sample reported 7 out of 159 (4.40%). These
+are small, uncontrolled samples with different frame counts and do not establish
+an improvement. Zero-rendered-frame samples are invalid and were discarded.
+The temporary tuning was reverted; no speculative scheduler tuning is committed.
+
+The production boot image uses the original Android ramdisk, production DT reset
+policy and original command line, without force_debuggable or initcall_debug.
+Its SHA-256 is
+12cf4c0be2c80a12768292602c07d9bf9f806c798d2fb17a5d20b73cd1a8af7c.
+It was written to boot and the complete image payload matched a partition
+readback. Original Recovery was restored and its full 64 MiB readback matches
+the original backup exactly. Production responsiveness testing remains pending;
+the production USB mode currently exposes MIDI without ADB.
+
