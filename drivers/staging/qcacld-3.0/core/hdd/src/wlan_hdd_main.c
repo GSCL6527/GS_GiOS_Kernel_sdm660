@@ -15382,8 +15382,17 @@ static int hdd_module_init(void)
 	int ret;
 
 	ret = wlan_hdd_state_ctrl_param_create();
-	if (ret)
+	if (ret) {
 		pr_err("wlan_hdd_state_create:%x\n", ret);
+		return ret;
+	}
+
+	/* Built-in users have no module insertion to trigger driver startup. */
+	if (IS_BUILTIN(CONFIG_QCA_CLD_WLAN)) {
+		ret = hdd_driver_load();
+		if (ret)
+			wlan_hdd_state_ctrl_param_destroy();
+	}
 
 	return ret;
 }

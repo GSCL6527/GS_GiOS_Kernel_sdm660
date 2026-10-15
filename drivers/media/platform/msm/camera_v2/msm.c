@@ -356,6 +356,11 @@ static inline int __msm_sd_register_subdev(struct v4l2_subdev *sd)
 	if (!msm_v4l2_dev || !sd || !sd->name[0])
 		return -EINVAL;
 
+#if defined(CONFIG_MEDIA_CONTROLLER)
+	/* Legacy camera HALs discover subdevices by the Qualcomm entity type. */
+	sd->entity.function = MSM_CAMERA_SUBDEV_BASE + sd->entity.group_id;
+#endif
+
 	rc = v4l2_device_register_subdev(msm_v4l2_dev, sd);
 	if (rc < 0) {
 		pr_err("v4l2_device_register_subdev: failed for %s\n",
