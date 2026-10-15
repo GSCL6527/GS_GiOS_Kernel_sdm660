@@ -43,6 +43,11 @@ phone. These observations narrow the investigation but do not prove the cause.
 6. **Truthful embedded configuration.** Generate IKCONFIG from KCONFIG_CONFIG,
    not the unrelated sdm660-perf-full_defconfig. Previously extracted settings
    (including pstore and device options) could falsely describe the booted image.
+7. **RAM accounting API consumers.** KGSL, TCP metrics and NTFS compared the
+   address of the totalram_pages inline function with memory thresholds instead
+   of calling it; dm-writecache also retained the old variable syntax. Convert
+   all executable consumers to totalram_pages() and remove the stale export of
+   the inline function (the backing _totalram_pages is already exported).
 
 ## Other paths reviewed
 
