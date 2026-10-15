@@ -67,6 +67,16 @@ config ARM_GIC_V3_ACL
 	  If you wish to enforce the Acces control then set this
 	  option to Y, if you are unsure please say N.
 
+config ARM_GIC_V3_NO_ACCESS_CONTROL
+	bool "Allow non-secure GICv3 redistributor power control"
+	depends on ARM_GIC_V3
+	default y if !ARCH_QCOM
+	help
+	  Enable access to GICR_WAKER when the platform allows the kernel to
+	  control redistributor power. Qualcomm production firmware may retain
+	  ownership of these registers in the secure world. Say N on such
+	  platforms to leave redistributor power control to firmware.
+
 config ARM_NVIC
 	bool
 	select IRQ_DOMAIN

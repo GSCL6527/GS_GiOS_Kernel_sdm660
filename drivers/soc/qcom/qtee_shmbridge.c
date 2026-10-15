@@ -300,6 +300,11 @@ int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
 		ret = -EINVAL;
 		goto exit;
 	}
+	/* SCM callers must not dereference an uninitialized or failed pool. */
+	if (!default_bridge.genpool) {
+		pr_err("shared memory bridge pool is not initialized\n");
+		return -ENODEV;
+	}
 	size = roundup(size, 1 << default_bridge.min_alloc_order);
 
 	va = gen_pool_alloc(default_bridge.genpool, size);
@@ -404,8 +409,10 @@ static int __init qtee_shmbridge_init(void)
 
 exit_destroy_pool:
 	gen_pool_destroy(default_bridge.genpool);
+	default_bridge.genpool = NULL;
 exit_freebuf:
 	free_pages((long)default_bridge.vaddr, get_order(default_bridge.size));
+	default_bridge.vaddr = NULL;
 exit:
 	return ret;
 }

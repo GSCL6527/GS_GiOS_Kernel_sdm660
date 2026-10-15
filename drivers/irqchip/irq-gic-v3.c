@@ -137,6 +137,7 @@ static u64 __maybe_unused gic_read_iar(void)
 }
 #endif
 
+#ifdef CONFIG_ARM_GIC_V3_NO_ACCESS_CONTROL
 static void gic_enable_redist(bool enable)
 {
 	void __iomem *rbase;
@@ -170,6 +171,10 @@ static void gic_enable_redist(bool enable)
 		pr_err_ratelimited("redistributor failed to %s...\n",
 				   enable ? "wakeup" : "sleep");
 }
+#else
+/* Firmware owns redistributor power on access-controlled platforms. */
+static void gic_enable_redist(bool enable) { }
+#endif
 
 /*
  * Routines to disable, enable, EOI and route interrupts
@@ -491,7 +496,8 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 #endif
 			continue;
 		}
-	} while (irqnr != ICC_IAR1_EL1_SPURIOUS);
+		/* 1020-1023 are special IDs, not interrupts to drain. */
+	} while (irqnr < 1020 || irqnr >= 8192);
 }
 
 static void __init gic_dist_init(void)

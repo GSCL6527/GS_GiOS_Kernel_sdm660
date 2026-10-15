@@ -5421,7 +5421,7 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 
 		qos->type = PM_QOS_REQ_AFFINE_CORES;
 
-		cpumask_empty(&qos->cpus_affine);
+		cpumask_clear(&qos->cpus_affine);
 		for_each_possible_cpu(cpu) {
 			if ((1 << cpu) & device->pwrctrl.l2pc_cpus_mask)
 				cpumask_set_cpu(cpu, &qos->cpus_affine);

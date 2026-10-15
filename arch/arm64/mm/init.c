@@ -506,16 +506,9 @@ void __init arm64_memblock_init(void)
 		memblock_remove(0, memstart_addr);
 	}
 
-	update_memory_limit();
 	/*
-	 * Save bootloader imposed memory limit before we overwirte
-	 * memblock.
-	 */
-	bootloader_memory_limit = memblock_end_of_DRAM();
-
-	/*
-	 * Save bootloader imposed memory limit before we overwirte
-	 * memblock.
+	 * Save the bootloader limit before applying the mem-offline policy.
+	 * update_memory_limit() changes memory_limit and must run only once.
 	 */
 	bootloader_memory_limit = memblock_max_addr(memory_limit);
 	if (bootloader_memory_limit > memblock_end_of_DRAM())
