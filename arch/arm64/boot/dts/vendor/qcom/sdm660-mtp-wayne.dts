@@ -189,3 +189,14 @@
 };
 
 #include "xiaomi/wayne.dtsi"
+
+/* Wayne has no reference-board camera shutter/focus GPIO keys. */
+&soc {
+	gpio_keys {
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_vol_up_default>;
+		/delete-property/ pinctrl-1;
+		/delete-node/ camera_focus;
+		/delete-node/ camera_snapshot;
+	};
+};
