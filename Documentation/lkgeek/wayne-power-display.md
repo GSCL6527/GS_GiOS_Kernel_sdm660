@@ -90,3 +90,38 @@ The original scripts changed additional settings and disabled some packages;
 quarantine does not guess or reset every historical user preference. Do not
 reenable unrelated packages, copy reference radio commands or reinstate the
 failed global SurfaceFlinger timing trial as a generic power optimization.
+
+
+### Quarantine reboot check
+
+After the controlled normal reboot Android again ran 7a667247c129. The three
+legacy services had never started (empty init.svc state), the cron entry was
+absent, WLAN logs remained a wifi-owned directory, and logd ran as PID 524.
+Quick power-on reads false and shutdown mode reads normal. GPU thermal trips
+returned to their defaults: gpu-usr critical 125000/passive 95000 and gpu-step
+95000. The 125000 critical hardware threshold is intentional and is not removed;
+the erroneous override of the lower control trip has been undone.
+
+Without the old scheduled job forcing both schedutil rate limits to zero, the
+vendor defaults are now up=500 us/down=20000 us. Top-app has CPUs 0-7, foreground
+0-3,6-7, normal frequency maxima remain, and the GPU governor is msm-adreno-tz.
+A same-scene A/B/A trial compares these defaults to the old zero/zero override;
+its script restores the vendor defaults and original screen timeout on exit.
+Frame and residency results are needed before claiming a performance/power gain.
+No autonomous energy-saving percentage or successful power-menu repair is claimed.
+
+
+### Governor A/B/A evidence
+
+All three 12-switch StoryVideoActivity runs completed with both log markers and
+zero hardware decoder errors, software fallbacks and in-window qbuf failures.
+The vendor-default A runs rendered 920/367 application frames with 50/45 missed
+deadlines (5.43%/12.26%); zero/zero B rendered 406 with 52 misses (12.81%).
+The different rendered-frame counts and evolving video/cache/thermal state mean
+this does not establish a fixed improvement percentage. In the second A run,
+mean frequency residency was 1294.7/1630.6 MHz for the little/big policies versus
+1308.2/1596.1 MHz in B, so this is not evidence of a net power reduction either.
+The vendor defaults are retained without forcing an unproven zero/zero override.
+Frequency residency includes idle time and is not an energy measurement.
+The original screen timeout was restored after the trial. Logd stayed at PID 524
+throughout, with no kernel oops; the known MDSS notifier warning remains.
