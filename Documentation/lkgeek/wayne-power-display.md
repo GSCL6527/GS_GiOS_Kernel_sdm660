@@ -125,3 +125,22 @@ The vendor defaults are retained without forcing an unproven zero/zero override.
 Frequency residency includes idle time and is not an energy measurement.
 The original screen timeout was restored after the trial. Logd stayed at PID 524
 throughout, with no kernel oops; the known MDSS notifier warning remains.
+
+
+### Actual power-menu check after configuration repair
+
+The installed framework's IWindowManager interface declares showGlobalActions
+as transaction 116; using that verified interface opens the actual Oplus menu.
+The upper restart gesture called lowLevelReboot(userrequested); the next boot
+reported reboot,userrequested and completed Android startup. Preserved terminal
+kernel logs explicitly show Restarting system, Going down for restart, warm
+reset and secondary-PMIC configuration without a reported PMIC configuration
+failure. The debug string lowLevelReboot,shutdown is misleading: the actual
+method writes reboot to sys.powerctl, not shutdown.
+
+The lower shutdown gesture called lowLevelShutdown(userrequested), with the
+framework recording Performing low-level shutdown and USB subsequently absent.
+Physical screen/off-mode-charging status and power-on follow-up are pending the
+user. One successful restart path and one correctly dispatched shutdown request
+do not prove an intermittent fault can never recur. No binary framework method
+or kernel shutdown/restart encoding was swapped.
