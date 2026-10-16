@@ -140,7 +140,12 @@ method writes reboot to sys.powerctl, not shutdown.
 
 The lower shutdown gesture called lowLevelShutdown(userrequested), with the
 framework recording Performing low-level shutdown and USB subsequently absent.
-Physical screen/off-mode-charging status and power-on follow-up are pending the
-user. One successful restart path and one correctly dispatched shutdown request
-do not prove an intermittent fault can never recur. No binary framework method
+The user confirmed the phone shut down normally, did not restart itself, and
+was subsequently powered on manually. Android startup completed on 7a667247c129;
+normal shutdown mode, disabled quick power-on, quarantined boot jobs and the
+repaired WLAN log directory persisted. No kernel oops appeared. Boot-reason
+properties read reboot; that generic value alone does not distinguish the manual
+power-on from other boot causes. The observed screen behavior and user action
+complete this single restart/shutdown cycle. This does not prove an intermittent
+fault can never recur. No binary framework method
 or kernel shutdown/restart encoding was swapped.
