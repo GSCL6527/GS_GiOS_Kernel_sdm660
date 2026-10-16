@@ -58,3 +58,32 @@ The phone is USB-connected and charging. Battery current is therefore not an
 isolated system power measurement; no percentage battery-life improvement is
 claimed from these captures. Compare frame deadlines and CPU/GPU residency
 under matched conditions, then validate unplugged discharge separately.
+
+## Device validation of c362f9b70541
+
+The normal-ramdisk image was flashed and its complete payload matched the boot
+partition readback. Android booted as c362f9b70541, with Pixie selected and the
+previous 150000000-byte/s configured target preserved. A native on-device TCP
+server checked Pixie on every accepted socket; 64 connections transferred a
+total of 64 MiB with matching payload hashes. This is an on-device TCP test via
+ADB forwarding, not a WLAN speed measurement. The new captures show no Pixie
+high-order allocation failures or ACK printk flood.
+
+Bluetooth off/on succeeded, the 3.0 keymaster and keystore remained running, and
+kernel warnings dropped from two to one: the UART warning no longer appeared;
+the known MDSS notifier ownership warning remains. ROM compositor cache and GL
+backpressure settings loaded after reboot, and blur remained disabled through
+the one-shot boot policy. These results do not establish that Bilibili vertical
+video stutter is fixed: that scene exposed an independent UBWC buffer-size
+mismatch, documented in wayne-vertical-video.md.
+
+`tools/wayne/rom-power-compat.sh apply` installs this tested ROM policy from the
+three files in that directory. Its backup resides on the phone under
+/data/local/tmp/lkgeek-rom-power-backup. `restore` restores original vendor
+properties and the orphan service declaration; it requires reboot to reload
+compositor configuration. It does not erase keystore data or change CPU/GPU
+maximum frequencies or thermal limits. The original Pixie target is saved in
+persist.lkgeek.pixie.rate. Blur policy can be opted out with
+persist.lkgeek.blur_compat=0; the earlier rom-compat.sh restore restores its prior
+runtime preference. The original vendor build.prop lacked a final newline;
+the installer explicitly inserts one before appending properties.
