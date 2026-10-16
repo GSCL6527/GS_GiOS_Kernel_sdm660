@@ -704,6 +704,9 @@ choice
 	config DEFAULT_CUBIC
 		bool "Cubic" if TCP_CONG_CUBIC=y
 
+	config DEFAULT_PIXIE
+		bool "Pixie" if TCP_CONG_PIXIE=y
+
 	config DEFAULT_HTCP
 		bool "Htcp" if TCP_CONG_HTCP=y
 
@@ -743,6 +746,7 @@ config DEFAULT_TCP_CONG
 	string
 	default "bic" if DEFAULT_BIC
 	default "cubic" if DEFAULT_CUBIC
+	default "pixie" if DEFAULT_PIXIE
 	default "htcp" if DEFAULT_HTCP
 	default "hybla" if DEFAULT_HYBLA
 	default "vegas" if DEFAULT_VEGAS

@@ -3459,7 +3459,9 @@ static int msm_hs_probe(struct platform_device *pdev)
 			pdata->bam_tx_ep_pipe_index;
 	msm_uport->bam_rx_ep_pipe_index =
 			pdata->bam_rx_ep_pipe_index;
-	msm_uport->wakeup.enabled = true;
+	/* Neither IRQ has been requested before the first runtime resume. */
+	msm_uport->wakeup.enabled = false;
+	msm_uport->wakeup.freed = true;
 
 	uport->iotype = UPIO_MEM;
 	uport->fifosize = 64;
