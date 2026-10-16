@@ -4070,8 +4070,9 @@ static int kshrinkd(void *pgdat)
 
 		/* Shrink slabs on both kswapd and direct reclaimers' behalf */
 		while (1) {
-			struct mem_cgroup *memcg = NULL;
+			struct mem_cgroup *memcg;
 
+			memcg = mem_cgroup_iter(NULL, NULL, NULL);
 			do {
 				shrink_slab(GFP_KERNEL, p->node_id, memcg, pri);
 			} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)));
@@ -4080,7 +4081,7 @@ static int kshrinkd(void *pgdat)
 				break;
 
 			/* Iterate down each possible priority and then wrap */
-			pri = (pri - 1) % (DEF_PRIORITY + 1);
+			pri = pri ? pri - 1 : DEF_PRIORITY;
 		}
 	}
 	current->flags &= ~PF_KSWAPD;
