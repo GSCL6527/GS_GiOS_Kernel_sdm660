@@ -23,7 +23,7 @@
 | OTG、外置存储 | 受限：尚无可用外设证据 | 有对应外设时验证 |
 | 日志、崩溃保存 | 已修复日志过滤与配置记录；暖复位保存曾验证 | 最终镜像日志完整性；冷复位可能丢失 RAM 日志 |
 | BPF、KernelSU | 先前虚拟机回归通过，最终镜像复验待做 | BPF/JIT、权限接口与内核错误检查 |
-| Recovery、安装与交付 | 当前安装日志版 recovery-warm；1a28 正常 ramdisk boot 已刷入并回读一致 | 最终 boot 回读、版本名、校验值、提交与推送 |
+| Recovery、安装与交付 | 当前安装日志版 recovery-warm；5af5ff1e137b 正常 ramdisk boot 已刷入并回读一致 | 最终 boot 回读、版本名、校验值、提交与推送 |
 
 原始设备日志仅保留在本地 .third-update-artifacts/device-debug/flash-test，不提交包含设备标识、网络和个人内容的原始记录。
 
@@ -46,3 +46,13 @@
 手机上脚本路径 /data/local/tmp/rom-compat.sh，root 执行 `sh /data/local/tmp/rom-compat.sh restore` 可恢复原来的模糊及日志限速；备份位于 /data/local/tmp/lkgeek-rom-compat。本轮原始模糊值为 0，日志限速属性为空（ROM 默认 5）。这部分设置无需修改 system/vendor。另有亮度转发修复修改 vendor 的专用 init 规则和新增适配脚本，详见 wayne-rom-display-compat.md。模糊设置曾被 ROM 在重启后重置，持久化仍待验收。
 
 OSS 栈重新启用后，修复其 Makefile 使用相对源码头文件路径导致 O= 构建失败的问题，及 ISP vm_fault 回调类型与新工具链不匹配问题。
+
+
+## 竖屏视频专项复验（5af5ff1e137b）
+
+正常生产 ramdisk 镜像已完成构建、配置/设备树校验、刷入和完整 payload 回读。
+Bilibili StoryVideoActivity 首轮 12 次上下切换未见 HEVC 硬件错误、软件回退或
+qbuf 失败；358 帧中 60 帧错过截止时间。第二轮仍未见硬解错误/回退，但动画
+掉帧仍存在。用户确认明显改善、主要剩动画掉帧，不能列为完全修复。
+详情和计数范围见 wayne-vertical-video.md。合成时序仍在做临时对照验证。
+QTI 振动服务保持运行，100ms 框架振动请求完成；实际触感尚未独立确认。

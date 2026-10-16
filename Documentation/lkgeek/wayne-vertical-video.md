@@ -31,7 +31,31 @@ redaction enabled every instance was named zero, so concurrent instances failed
 to create diagnostic directories. Use hashed %p for unique diagnostic names;
 continue redacting addresses in normal logs.
 
-Incremental build and device switching regression are required before reporting
-this video fix as passed. Temporary VB2 and VIDC debug levels were restored after
-capture. Debugfs was mounted for inspection and should be unmounted after the
-remaining diagnostics if it was not originally mounted.
+## Installed-device validation
+
+The production Image.gz and device trees built successfully. Gzip payload,
+embedded configuration and Wayne device-tree checks passed. The normal-ramdisk
+boot image was flashed and its payload exactly matched partition readback;
+Android reports 4.19.325-LKGeek-perf-g5af5ff1e137b.
+
+The first bounded 12-switch StoryVideoActivity capture recorded zero HEVC
+0x80001009 errors, zero software-decoder fallback messages and zero qbuf errors.
+358 application frames were rendered; 60 missed their deadlines (16.76%). The
+user confirmed a clear improvement, with remaining animation frame drops.
+A second 12-switch capture recorded 354 frames and 71 missed deadlines (20.06%),
+again with no HEVC hardware error or fallback. These are separate online-content
+runs, not a controlled estimate of a percentage performance improvement.
+
+The second full-boot kernel snapshot contains six qbuf EINVAL messages before
+the capture's start. A cumulative dmesg count cannot attribute them to that
+12-switch window; they need independent lifecycle investigation. Application
+frame counters use before/after deltas because gfxinfo reset does not reliably
+reset every window's cumulative counters on this ROM.
+
+For the last 120 Story frames in the second capture, GPU completion after submit
+had a 7.97 ms 95th percentile, while application dispatch delay and main-thread
+work had 58.43 ms and 89.73 ms 95th percentiles. This identifies remaining CPU-side
+frame spikes but does not establish whether the cause is scheduling, application
+work or blocking. Further compositor timing trials are reversible and are not
+a validated production change yet. Temporary VB2/VIDC diagnostic levels were
+restored; debugfs is unmounted after inspection.

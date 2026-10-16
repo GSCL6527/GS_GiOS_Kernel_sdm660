@@ -87,3 +87,15 @@ persist.lkgeek.pixie.rate. Blur policy can be opted out with
 persist.lkgeek.blur_compat=0; the earlier rom-compat.sh restore restores its prior
 runtime preference. The original vendor build.prop lacked a final newline;
 the installer explicitly inserts one before appending properties.
+
+
+## Orphan vibrator service
+
+The Oplus lmvibrator service repeatedly exited successfully and restarted every
+five seconds, while the actual QTI vibrator AIDL service was already running.
+The reversible installer now adds disabled/oneshot only when that QTI service
+is running and the orphan declaration exists. Its original declaration is
+backed up alongside the other vendor originals. The orphan was stopped on the
+phone, QTI remained running, and a 100 ms framework vibration request completed.
+Physical vibration strength was not independently observed. This eliminates an
+invalid service retry loop; it is not a measured battery-life improvement.
