@@ -76,7 +76,11 @@ changed deadline budgets prevent a quantitative before/after improvement claim.
 Animation drops remain; user-perceived latency improvement is not a zero-jank
 result.
 
-The reversible ROM installer now persists this tested 60 Hz timing. Original
-vendor properties remain backed up and restore reinstates them. This is a Wayne
-ROM adjustment, not a generic kernel timing override or an overclock. CPU/GPU
-maximum frequencies and thermal protection remain unchanged.
+Subsequent user testing found a regression across the whole phone, superseding
+the earlier scene-specific positive feedback. The duration trial is rejected:
+all six original duration properties were restored both at runtime and in vendor
+build.prop, followed by a SurfaceFlinger restart. The installer no longer writes
+these duration properties. Do not reapply the 22/10.5 ms trial based on its budget
+arithmetic or the earlier limited scene feedback. The independently validated
+Venus decoder compatibility fix remains installed. CPU/GPU limits and thermal
+protection remain unchanged.
