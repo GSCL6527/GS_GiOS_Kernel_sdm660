@@ -59,3 +59,24 @@ frame spikes but does not establish whether the cause is scheduling, application
 work or blocking. Further compositor timing trials are reversible and are not
 a validated production change yet. Temporary VB2/VIDC diagnostic levels were
 restored; debugfs is unmounted after inspection.
+
+
+## Reversible 60 Hz compositor timing
+
+The imported ROM used late app/SF budgets of 23.5/10.5 ms (34 ms total), early
+16.5/21 ms and early-GL 21/13.5 ms. Each total exceeds two 60 Hz display periods.
+A temporary restart with 22/10.5 ms for all three modes was confirmed in the
+SurfaceFlinger dump: app phase changed from about 16 ms to 0.833 ms. The user
+reported a further improvement in vertical animation. Two 12-switch trials
+recorded 60/411 and 116/462 missed deadlines (14.60% and 25.11%), with no hardware
+codec errors, software fallback or qbuf failures inside either window. The first
+trial's log start marker was lost at stream startup, so its codec-log coverage
+is incomplete; the second has both markers. Different content, cache state and
+changed deadline budgets prevent a quantitative before/after improvement claim.
+Animation drops remain; user-perceived latency improvement is not a zero-jank
+result.
+
+The reversible ROM installer now persists this tested 60 Hz timing. Original
+vendor properties remain backed up and restore reinstates them. This is a Wayne
+ROM adjustment, not a generic kernel timing override or an overclock. CPU/GPU
+maximum frequencies and thermal protection remain unchanged.

@@ -52,12 +52,19 @@ apply)
     fi
     trap cleanup EXIT HUP INT TERM
     rollback=1
-    sed '/^debug\.sf\.disable_client_composition_cache=/d; /^debug\.sf\.enable_gl_backpressure=/d; /^debug\.sf\.disable_backpressure=/d' /vendor/build.prop > "$backup/build.prop.next"
+    sed '/^debug\.sf\.disable_client_composition_cache=/d; /^debug\.sf\.enable_gl_backpressure=/d; /^debug\.sf\.disable_backpressure=/d; /^debug\.sf\.late\.app\.duration=/d; /^debug\.sf\.late\.sf\.duration=/d; /^debug\.sf\.early\.app\.duration=/d; /^debug\.sf\.early\.sf\.duration=/d; /^debug\.sf\.earlyGl\.app\.duration=/d; /^debug\.sf\.earlyGl\.sf\.duration=/d' /vendor/build.prop > "$backup/build.prop.next"
     printf '\n' >> "$backup/build.prop.next"
     cat >> "$backup/build.prop.next" <<'PROPS'
 debug.sf.disable_client_composition_cache=0
 debug.sf.enable_gl_backpressure=1
 debug.sf.disable_backpressure=0
+# Wayne 60 Hz: 32.5 ms total avoids the old 34+ ms budget wrapping to a third period.
+debug.sf.late.app.duration=22000000
+debug.sf.late.sf.duration=10500000
+debug.sf.early.app.duration=22000000
+debug.sf.early.sf.duration=10500000
+debug.sf.earlyGl.app.duration=22000000
+debug.sf.earlyGl.sf.duration=10500000
 PROPS
     cat "$backup/build.prop.next" > /vendor/build.prop
     if ! grep -q '^[[:space:]]*disabled[[:space:]]*$' /vendor/etc/init/android.hardware.keymaster@4.0-service.rc; then
