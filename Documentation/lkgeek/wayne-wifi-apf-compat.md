@@ -19,8 +19,11 @@ EOPNOTSUPP before scheduling firmware work. Keep legacy SET and GET commands,
 packet filtering, and Linux BPF/JIT available. Do not silently return fake packet
 contents or globally disable BPF.
 
-Validation pending: build, live reconnect timing, absence of ten-second read
-waits, legacy filter installation, and network validation on the actual phone.
+The combined kernel and device-tree build passed. Two checked live reconnects
+obtained IPv4 in 1.49 and 1.539 seconds, and Internet VALIDATED state in 2.756
+and 2.21 seconds. No APF read timeout appeared in the new captures. Initial
+pre-DHCP completion took approximately 24 milliseconds. Legacy filter operation
+has not been exhaustively tested with crafted packets.
 The initial wrong phone date also caused HTTPS probe certificate failures;
 automatic time later corrected it. This is a separate ROM startup-time issue,
 not evidence that APF fixes all possible Wi-Fi failures.

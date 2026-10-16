@@ -13,10 +13,14 @@ until NULL so reference handling and the MEMCG-disabled single global pass are
 preserved. Also replace unsigned-underflow priority modulo with an explicit
 wrap to DEF_PRIORITY, matching the loop's intended priority sequence.
 
-The fix is pending build and device pressure/stability validation. A successful
-boot alone does not establish that the delayed-panic regression is fixed. The
-previously observed camera HAL close stall remains a separate unresolved issue
-until its own regression checks pass.
+The combined fix built Image.gz and device trees successfully. The production
+ramdisk image was flashed, read back and booted as 1a28b19f6284. A bounded 1.5 GiB
+anonymous-memory test touched, verified and released every allocated page;
+kshrinkd CPU ticks increased from 0 to 19. The phone then remained running past
+1,400 seconds without the previous panic. This exercises the failing reclaim
+path, but does not establish unlimited stability or resolve every display issue.
+The previously observed camera HAL close stall remains a separate observation;
+the user subsequently confirmed normal camera operation.
 
 Private pstore: .third-update-artifacts/device-debug/flash-test/reconnected-test/
 reboot-after-hang/pstore. Keep the original capture locally rather than committing
