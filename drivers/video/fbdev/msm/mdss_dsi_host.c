@@ -1233,6 +1233,10 @@ static int mdss_dsi_read_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	return rc;
 }
 
+#ifdef CONFIG_MACH_LONGCHEER
+extern char g_lcd_id[128];
+extern bool ESD_TE_status;
+#endif
 
 /**
  * mdss_dsi_reg_status_check() - Check dsi panel status through reg read
@@ -1295,6 +1299,10 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			ret = ctrl_pdata->check_read_status(sctrl_pdata);
 	} else {
 		pr_err("%s: Read status register returned error\n", __func__);
+#ifdef CONFIG_MACH_LONGCHEER
+		if ((strstr(g_lcd_id, "nt36672") != NULL) || (strstr(g_lcd_id, "nt36672a") != NULL) || (strstr(g_lcd_id, "td4320") != NULL))
+			ESD_TE_status = true;
+#endif
 	}
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, ctrl_pdata->dsi_clk_handle,
@@ -3046,7 +3054,7 @@ static int dsi_event_thread(void *data)
 	spin_lock_init(&ev->event_lock);
 
 	while (1) {
-		wait_event_interruptible(ev->event_q, (ev->event_pndx != ev->event_gndx));
+		wait_event(ev->event_q, (ev->event_pndx != ev->event_gndx));
 		spin_lock_irqsave(&ev->event_lock, flag);
 		evq = &ev->todo_list[ev->event_gndx++];
 		todo = evq->todo;

@@ -715,12 +715,8 @@ static inline bool is_sec_access(struct fg_dev *fg, int addr)
 	if (fg->version != GEN3_FG)
 		return false;
 
-#ifdef CONFIG_MACH_LONGCHEER
 #if defined(CONFIG_MACH_XIAOMI_TULIP) || defined(CONFIG_MACH_XIAOMI_WAYNE)
 	return ((addr & 0x00FF) > 0xBA);
-#else
-	return ((addr & 0x00FF) > 0xD0);
-#endif
 #else
 	return ((addr & 0x00FF) > 0xB8);
 #endif
@@ -932,12 +928,8 @@ int fg_get_msoc(struct fg_dev *fg, int *msoc)
 	else if (*msoc == 0)
 		*msoc = 0;
 	else
-		*msoc = DIV_ROUND_CLOSEST(*msoc * FULL_CAPACITY,
-				FULL_SOC_RAW);
-
-	if (*msoc >= FULL_CAPACITY)
-		*msoc = FULL_CAPACITY;
-	
+		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
+				FULL_SOC_RAW - 2) + 1;
 	return 0;
 }
 

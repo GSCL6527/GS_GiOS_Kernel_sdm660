@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2002, 2007-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __KGSL_SHAREDMEM_H
 #define __KGSL_SHAREDMEM_H
@@ -68,8 +69,8 @@ int kgsl_allocate_user(struct kgsl_device *device,
 
 void kgsl_get_memory_usage(char *str, size_t len, uint64_t memflags);
 
-int kgsl_sharedmem_page_alloc_user(struct kgsl_device *device,
-				struct kgsl_memdesc *memdesc, uint64_t size);
+int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
+				uint64_t size);
 
 void kgsl_free_secure_page(struct page *page);
 
@@ -106,7 +107,7 @@ void kgsl_free_pages_from_sgt(struct kgsl_memdesc *memdesc);
  *
  * Returns the alignment requested, as power of 2 exponent.
  */
-static inline int
+static inline u32
 kgsl_memdesc_get_align(const struct kgsl_memdesc *memdesc)
 {
 	return MEMFLAGS(memdesc->flags, KGSL_MEMALIGN_MASK,
@@ -366,10 +367,13 @@ static inline void kgsl_free_sgt(struct sg_table *sgt)
  *
  * Return supported pagesize
  */
-#if !defined(CONFIG_QCOM_KGSL_USE_SHMEM) && \
-	!defined(CONFIG_ALLOC_BUFFERS_IN_4K_CHUNKS)
-static inline int kgsl_get_page_size(size_t size, unsigned int align)
+#ifndef CONFIG_ALLOC_BUFFERS_IN_4K_CHUNKS
+static inline int kgsl_get_page_size(size_t size, unsigned int align,
+			struct kgsl_memdesc *memdesc)
 {
+	if (memdesc->priv & KGSL_MEMDESC_USE_SHMEM)
+		return PAGE_SIZE;
+
 	if (align >= ilog2(SZ_1M) && size >= SZ_1M &&
 		kgsl_pool_avaialable(SZ_1M))
 		return SZ_1M;
@@ -404,12 +408,10 @@ unsigned int kgsl_gfp_mask(unsigned int page_order);
  * kgsl_zero_page() - zero out a page
  * @p: pointer to the struct page
  * @order: order of the page
- * @dev: Pointer to the device
  *
  * Map a page into kernel and zero it out
  */
-void kgsl_zero_page(struct page *page, unsigned int order,
-					struct device *dev);
+void kgsl_zero_page(struct page *page, unsigned int order);
 
 /**
  * kgsl_flush_page - flush a page

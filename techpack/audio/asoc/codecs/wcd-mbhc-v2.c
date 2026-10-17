@@ -656,7 +656,6 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			}
 			mbhc->hph_status &= ~(SND_JACK_HEADSET |
 						SND_JACK_LINEOUT |
-						SND_JACK_ANC_HEADPHONE |
 						SND_JACK_UNSUPPORTED);
 #ifdef CONFIG_MACH_LONGCHEER
 			mbhc->force_linein = false;
@@ -677,8 +676,9 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			mbhc->jiffies_atreport = jiffies;
 		} else if (jack_type == SND_JACK_LINEOUT) {
 			mbhc->current_plug = MBHC_PLUG_TYPE_HIGH_HPH;
-		} else if (jack_type == SND_JACK_ANC_HEADPHONE)
-			mbhc->current_plug = MBHC_PLUG_TYPE_ANC_HEADPHONE;
+		} else {
+			pr_debug("%s: invalid Jack type %d\n",__func__, jack_type);
+		}
 
 		if (mbhc->mbhc_cb->hph_pa_on_status)
 			is_pa_on = mbhc->mbhc_cb->hph_pa_on_status(component);
@@ -860,8 +860,6 @@ void wcd_mbhc_find_plug_and_report(struct wcd_mbhc *mbhc,
 			anc_mic_found =
 			mbhc->mbhc_fn->wcd_mbhc_detect_anc_plug_type(mbhc);
 		jack_type = SND_JACK_HEADSET;
-		if (anc_mic_found)
-			jack_type = SND_JACK_ANC_HEADPHONE;
 
 		/*
 		 * If Headphone was reported previously, this will
@@ -1068,9 +1066,6 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 			mbhc->is_extn_cable = false;
 			jack_type = SND_JACK_LINEOUT;
 			break;
-		case MBHC_PLUG_TYPE_ANC_HEADPHONE:
-			jack_type = SND_JACK_ANC_HEADPHONE;
-			break;
 		default:
 			pr_info("%s: Invalid current plug: %d\n",
 				__func__, mbhc->current_plug);
@@ -1260,7 +1255,7 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 	}
 	mbhc->buttons_pressed |= mask;
 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
-	if (queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_btn_dwork,
+	if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
 				msecs_to_jiffies(400)) == 0) {
 		WARN(1, "Button pressed twice without release event\n");
 		mbhc->mbhc_cb->lock_sleep(mbhc, false);
@@ -1903,10 +1898,10 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 		mbhc->swap_thr = GND_MIC_USBC_SWAP_THRESHOLD;
 		mbhc->fsa_np = of_parse_phandle(card->dev->of_node,
 				"fsa4480-i2c-handle", 0);
-		if (unlikely(mbhc->fsa_np)) {
+		if (mbhc->fsa_np) {
 			mbhc_cfg->fsa_enable = true;
 		} else {
-			dev_dbg(card->dev, "%s: fsa4480 i2c node not found\n",
+			dev_err(card->dev, "%s: fsa4480 i2c node not found\n",
 					__func__);
 
 			mbhc_cfg->fsa_enable = false;
@@ -1961,7 +1956,7 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 		}
 	} else {
 		if (!mbhc->mbhc_fw || !mbhc->mbhc_cal)
-			queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_firmware_dwork,
+			schedule_delayed_work(&mbhc->mbhc_firmware_dwork,
 				      usecs_to_jiffies(FW_READ_TIMEOUT));
 		else
 			pr_err("%s: Skipping to read mbhc fw, 0x%pK %pK\n",

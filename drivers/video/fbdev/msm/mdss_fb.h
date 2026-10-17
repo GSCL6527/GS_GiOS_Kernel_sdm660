@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2008-2018, 2020-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (C) 2019 XiaoMi, Inc. */
 
 #ifndef MDSS_FB_H
 #define MDSS_FB_H
@@ -10,7 +11,6 @@
 #include <linux/types.h>
 #include <linux/notifier.h>
 #include <linux/leds.h>
-#include <linux/ion_kernel.h>
 
 #include "mdss_panel.h"
 #include "mdss_mdp_splash_logo.h"
@@ -333,7 +333,7 @@ struct msm_fb_data_type {
 	struct task_struct *disp_thread;
 	atomic_t commits_pending;
 	atomic_t kickoff_pending;
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	atomic_t resume_pending;
 	wait_queue_head_t resume_wait_q;
 #endif
@@ -482,5 +482,7 @@ void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
 						struct fb_var_screeninfo *var);
 void mdss_fb_calc_fps(struct msm_fb_data_type *mfd);
 void mdss_fb_idle_pc(struct msm_fb_data_type *mfd);
+extern struct dma_buf *ion_alloc(size_t len, unsigned int heap_id_mask,
+							unsigned int flags);
 
 #endif /* MDSS_FB_H */

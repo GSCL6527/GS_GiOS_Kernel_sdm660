@@ -1076,10 +1076,8 @@ struct rq {
 	int			prev_top;
 	int			curr_top;
 	bool			notif_pending;
-#ifndef CONFIG_SONY_SCHED
 	u64			last_cc_update;
 	u64			cycles;
-#endif
 #endif /* CONFIG_SCHED_WALT */
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING

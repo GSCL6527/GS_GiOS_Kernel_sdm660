@@ -670,8 +670,6 @@
 			qcom,smmu-version = <2>;
 			qcom,smmu-enabled;
 			iommus = <&lpass_q6_smmu 1>;
-			qcom,iommu-dma-addr-pool = <0x10000000 0x10000000>;
-			qcom,smmu-sid-mask = /bits/ 64 <0xf>;
 		};
 	};
 
@@ -837,5 +835,13 @@
 		clocks = <&clock_rpmcc RPM_SMD_LN_BB_CLK2>;
 		qcom,node_has_rpm_clock;
 		#clock-cells = <1>;
+	};
+
+	wcd_rst_gpio: msm_cdc_pinctrl@64 {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&lpi_cdc_reset_active>;
+		pinctrl-1 = <&lpi_cdc_reset_sleep>;
+		qcom,lpi-gpios;
 	};
 };

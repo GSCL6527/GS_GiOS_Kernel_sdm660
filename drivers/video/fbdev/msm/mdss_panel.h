@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2008-2018, 2020-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (C) 2019 XiaoMi, Inc. */
 
 #ifndef MDSS_PANEL_H
 #define MDSS_PANEL_H
@@ -305,6 +306,7 @@ enum mdss_intf_events {
 	MDSS_EVENT_AVR_MODE,
 	MDSS_EVENT_REGISTER_CLAMP_HANDLER,
 	MDSS_EVENT_DSI_DYNAMIC_BITCLK,
+	MDSS_EVENT_UPDATE_LIVEDISPLAY,
 	MDSS_EVENT_MAX,
 };
 
@@ -762,6 +764,8 @@ struct mdss_dsi_dual_pu_roi {
 	bool enabled;
 };
 
+struct mdss_livedisplay_ctx;
+
 struct mdss_panel_hdr_properties {
 	bool hdr_enabled;
 
@@ -776,6 +780,14 @@ struct mdss_panel_hdr_properties {
 	/* Blackness level supported by panel */
 	u32 blackness_level;
 };
+
+#ifdef CONFIG_MACH_MI
+struct mdss_panel_esd_check {
+	unsigned char check_cmd;
+	unsigned char check_value;
+	unsigned int panel_dead_report_delay;
+};
+#endif
 
 struct mdss_panel_info {
 	u32 xres;
@@ -923,6 +935,8 @@ struct mdss_panel_info {
 	 */
 	u32 adjust_timer_delay_ms;
 
+	struct mdss_livedisplay_ctx *livedisplay;
+
 	/* debugfs structure for the panel */
 	struct mdss_panel_debugfs_info *debugfs_info;
 
@@ -937,6 +951,16 @@ struct mdss_panel_info {
 
 	/* esc clk recommended for the panel */
 	u32 esc_clk_rate_hz;
+
+#ifdef CONFIG_MACH_MI
+	u32 tp_rst_seq[MDSS_DSI_RST_SEQ_LEN];
+	u32 tp_rst_seq_len;
+	u32 esd_err_irq_gpio;
+	u32 esd_err_irq;
+	u32 esd_interrupt_flags;
+	struct mdss_panel_esd_check initial_esd_check;
+	uint32_t panel_on_dimming_delay;
+#endif
 };
 
 struct mdss_panel_timing {
@@ -1010,6 +1034,10 @@ struct mdss_panel_data {
 
 	int panel_te_gpio;
 	struct completion te_done;
+
+#ifdef CONFIG_MACH_MI
+	void (*panel_dead_report)(void);
+#endif
 };
 
 struct mdss_panel_debugfs_info {

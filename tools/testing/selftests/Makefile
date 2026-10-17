@@ -27,6 +27,7 @@ TARGETS += net
 TARGETS += netfilter
 TARGETS += nsfs
 TARGETS += powerpc
+TARGETS += printk
 TARGETS += proc
 TARGETS += pstore
 TARGETS += ptrace
@@ -159,7 +160,7 @@ else
 endif
 
 clean:
-	@for TARGET in $(TARGETS); do \
+	@for TARGET in $(TARGETS) $(INSTALL_DEP_TARGETS); do \
 		BUILD_TARGET=$$BUILD/$$TARGET;	\
 		make OUTPUT=$$BUILD_TARGET -C $$TARGET clean;\
 	done;

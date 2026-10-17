@@ -1038,8 +1038,8 @@ static int xfrm_dump_sa(struct sk_buff *skb, struct netlink_callback *cb)
 		u8 proto = 0;
 		int err;
 
-		err = nlmsg_parse(cb->nlh, 0, attrs, XFRMA_MAX, xfrma_policy,
-				  NULL);
+		err = nlmsg_parse_deprecated(cb->nlh, 0, attrs, XFRMA_MAX,
+					     xfrma_policy, NULL);
 		if (err < 0)
 			return err;
 
@@ -2000,7 +2000,7 @@ static int xfrm_flush_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct xfrm_usersa_flush *p = nlmsg_data(nlh);
 	int err;
 
-	err = xfrm_state_flush(net, p->proto, true, false);
+	err = xfrm_state_flush(net, p->proto, true);
 	if (err) {
 		if (err == -ESRCH) /* empty table */
 			return 0;
@@ -2753,9 +2753,9 @@ static int xfrm_user_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto err;
 	}
 
-	err = nlmsg_parse(nlh, xfrm_msg_min[type], attrs,
-			  link->nla_max ? : XFRMA_MAX,
-			  link->nla_pol ? : xfrma_policy, extack);
+	err = nlmsg_parse_deprecated(nlh, xfrm_msg_min[type], attrs,
+				     link->nla_max ? : XFRMA_MAX,
+				     link->nla_pol ? : xfrma_policy, extack);
 	if (err < 0)
 		goto err;
 
@@ -3329,6 +3329,7 @@ static int build_report(struct sk_buff *skb, u8 proto,
 		return -EMSGSIZE;
 
 	ur = nlmsg_data(nlh);
+	memset(ur, 0, sizeof(*ur));
 	ur->proto = proto;
 	memcpy(&ur->sel, sel, sizeof(ur->sel));
 

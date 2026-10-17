@@ -18,7 +18,7 @@
 #include "msm_cci.h"
 #include "msm_camera_dt_util.h"
 #ifdef CONFIG_MACH_LONGCHEER
-#include <soc/qcom/camera2-legacy.h>
+#include <soc/qcom/camera2.h>
 extern struct vendor_eeprom s_vendor_eeprom[CAMERA_VENDOR_EEPROM_COUNT_MAX];
 #endif
 
@@ -240,7 +240,6 @@ static int32_t msm_sensor_fill_eeprom_subdevid_by_name(
 		if (!userspace_probe &&
 			strcmp(eeprom_name, s_ctrl->sensordata->eeprom_name))
 			continue;
-
 #ifdef CONFIG_MACH_LONGCHEER
 		if (userspace_probe) {
 			rc = of_property_read_string(src_node,
@@ -701,7 +700,6 @@ static int32_t msm_sensor_get_power_settings(void *setting,
 	rc = msm_sensor_get_power_up_settings(setting, slave_info, power_info);
 	if (rc < 0) {
 		pr_err("failed");
-		kfree(power_info->power_setting);
 		return -EINVAL;
 	}
 
@@ -774,8 +772,8 @@ static char module_info[256] = {0};
 
 void msm_sensor_set_module_info(struct msm_sensor_ctrl_t *s_ctrl)
 {
-	CDBG("s_ctrl->sensordata->camera_type = %d\n",
-	      s_ctrl->sensordata->sensor_info->position);
+	printk(" s_ctrl->sensordata->camera_type = %d\n",
+			s_ctrl->sensordata->sensor_info->position);
 
 	switch (s_ctrl->sensordata->sensor_info->position) {
 		case BACK_CAMERA_B:
@@ -821,17 +819,15 @@ int32_t msm_sensor_init_device_name(void)
 		pr_err("Macle android_camera already created\n");
 		return 0;
 	}
-
 	msm_sensor_device = kobject_create_and_add("android_camera", NULL);
 	if (msm_sensor_device == NULL) {
-		pr_err("%s: subsystem_register failed\n", __func__);
+		printk("%s: subsystem_register failed\n", __func__);
 		rc = -ENOMEM;
 		return rc;
 	}
-
 	rc = sysfs_create_file(msm_sensor_device, &dev_attr_sensor.attr);
 	if (rc) {
-		pr_err("%s: sysfs_create_file failed\n", __func__);
+		printk("%s: sysfs_create_file failed\n", __func__);
 		kobject_del(msm_sensor_device);
 	}
 
@@ -941,11 +937,10 @@ static uint16_t msm_sensor_get_sensor_id_sony_486(
 	CDBG("%s:%d E \n", __func__, __LINE__);
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
 
-	mdelay(1);
-
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0100,
 		0x01, MSM_CAMERA_I2C_WORD_DATA);
+	mdelay(1);
 	if (rc < 0) {
 		pr_err("%s:lct write 0x0100 failed\n", __func__);
 		return rc;
@@ -958,7 +953,6 @@ static uint16_t msm_sensor_get_sensor_id_sony_486(
 	sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0A00,
 		0x01, MSM_CAMERA_I2C_BYTE_DATA);
-
 	mdelay(20);
 
 	for (i = 0; i < 11; i++) {
@@ -999,11 +993,10 @@ static uint16_t msm_sensor_get_sensor_id_sony_376(
 	CDBG("%s:%d E \n", __func__, __LINE__);
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
 
-	mdelay(1);
-
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0100,
 		0x01, MSM_CAMERA_I2C_WORD_DATA);
+	mdelay(1);
 	if (rc < 0) {
 		pr_err("%s:lct write 0x0100 failed\n", __func__);
 		return rc;
@@ -1016,7 +1009,6 @@ static uint16_t msm_sensor_get_sensor_id_sony_376(
 	sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0A00,
 		0x01, MSM_CAMERA_I2C_BYTE_DATA);
-
 	mdelay(20);
 
 	for (i = 0; i < 11; i++) {
@@ -1057,11 +1049,10 @@ static uint16_t msm_sensor_get_sensor_id_samsung_5e8(
 	CDBG("%s:%d E \n", __func__, __LINE__);
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
 
-	mdelay(1);
-
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0100,
 		0x00, MSM_CAMERA_I2C_BYTE_DATA);
+	mdelay(1);
 	if (rc < 0) {
 		pr_err("%s:lct write 0x0100 failed\n", __func__);
 		return rc;
@@ -1123,12 +1114,10 @@ static uint16_t msm_sensor_get_sensor_id_samsung_2L7(
 	CDBG("%s:%d E \n", __func__, __LINE__);
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
 
-	mdelay(1);
-
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0100,
 		0x0100, MSM_CAMERA_I2C_BYTE_DATA);
-
+	mdelay(1);
 	if (rc < 0) {
 		pr_err("%s:lct write 0x0100 failed\n", __func__);
 		return rc;
@@ -1141,7 +1130,6 @@ static uint16_t msm_sensor_get_sensor_id_samsung_2L7(
 	sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0A00,
 		0x0100, MSM_CAMERA_I2C_WORD_DATA);
-
 	mdelay(95);
 
 	for (i = 0; i < 16; i++) {
@@ -1194,7 +1182,6 @@ static uint16_t msm_sensor_get_sensor_id_samsung_3T1(
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0100,
 		0x01, MSM_CAMERA_I2C_BYTE_DATA);
-
 	mdelay(2);
 
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
@@ -1204,7 +1191,6 @@ static uint16_t msm_sensor_get_sensor_id_samsung_3T1(
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
 		sensor_i2c_client, 0x0A00,
 		0x01, MSM_CAMERA_I2C_BYTE_DATA);
-
 	mdelay(1);
 
 	for (i = 0; i < 16; i++) {
@@ -1285,70 +1271,74 @@ void msm_sensor_set_sensor_id(struct msm_sensor_ctrl_t *s_ctrl)
 	}
 
 	if ((!strcmp("whyred_imx486_ofilm_global_i", s_ctrl->sensordata->sensor_name)) ||
-		(!strcmp("whyred_imx486_qtech_global_ii", s_ctrl->sensordata->sensor_name))) {
+	    (!strcmp("whyred_imx486_qtech_global_ii", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("wayne_imx486_sunny_i", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("wayne_imx486_ofilm_ii", s_ctrl->sensordata->sensor_name))) {
 		rc = msm_sensor_get_sensor_id_sony_486(s_ctrl, sensor_fusion_id_tmp);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("%s:%d lct read sensor %s fusion id failed\n",
 					__func__, __LINE__,
 					s_ctrl->sensordata->sensor_name);
+		}
 	}
-
 	if ((!strcmp("whyred_imx376_ofilm_global_i", s_ctrl->sensordata->sensor_name)) ||
-	    (!strcmp("whyred_imx376_sunny_global_ii", s_ctrl->sensordata->sensor_name))) {
+	    (!strcmp("whyred_imx376_sunny_global_ii", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("wayne_imx376_sunny_back_i", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("wayne_imx376_ofilm_back_ii", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("wayne_imx376_sunny_front_i", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("wayne_imx376_ofilm_front_ii", s_ctrl->sensordata->sensor_name))) {
 		rc = msm_sensor_get_sensor_id_sony_376(s_ctrl, sensor_fusion_id_tmp);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("%s:%d lct read sensor %s fusion id failed\n",
 					__func__, __LINE__,
 					s_ctrl->sensordata->sensor_name);
+		}
 	}
-
-	if ((!strcmp("whyred_s5k5e8_ofilm_i", s_ctrl->sensordata->sensor_name))
-	 || (!strcmp("whyred_s5k5e8_qtech_ii", s_ctrl->sensordata->sensor_name))
+	if ((!strcmp("whyred_s5k5e8_ofilm_i", s_ctrl->sensordata->sensor_name)) ||
+	    (!strcmp("whyred_s5k5e8_qtech_ii", s_ctrl->sensordata->sensor_name))
 #ifdef CONFIG_MACH_XIAOMI_TULIP
 	 || (!strcmp("tulip_s5k5e8_ofilm_i", s_ctrl->sensordata->sensor_name))
 	 || (!strcmp("tulip_s5k5e8_qtech_ii", s_ctrl->sensordata->sensor_name))
 #endif
-		) {
+	  ) {
 		rc = msm_sensor_get_sensor_id_samsung_5e8(s_ctrl, sensor_fusion_id_tmp);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("%s:%d lct read sensor %s fusion id failed\n",
 					__func__, __LINE__,
 					s_ctrl->sensordata->sensor_name);
-
+		}
 	}
-
 	if ((!strcmp("whyred_s5k2l7_ofilm_cn_i", s_ctrl->sensordata->sensor_name)) ||
 	    (!strcmp("whyred_s5k2l7_qtech_cn_ii", s_ctrl->sensordata->sensor_name))) {
 		rc = msm_sensor_get_sensor_id_samsung_2L7(s_ctrl, sensor_fusion_id_tmp);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("%s:%d lct read sensor %s fusion id failed\n",
 					__func__, __LINE__,
 					s_ctrl->sensordata->sensor_name);
-
+		}
 	}
-
 #ifdef CONFIG_MACH_XIAOMI_TULIP
 	if ((!strcmp("tulip_s5k3T1_sunny_i", s_ctrl->sensordata->sensor_name)) ||
 	    (!strcmp("tulip_s5k3T1_ofilm_ii", s_ctrl->sensordata->sensor_name))) {
 		rc = msm_sensor_get_sensor_id_samsung_3T1(s_ctrl, sensor_fusion_id_tmp);
-		if (rc < 0)
+		if (rc < 0){
 			pr_err("%s:%d lct read sensor %s fusion id failed\n",
 					__func__, __LINE__,
 					s_ctrl->sensordata->sensor_name);
+		}
 	}
 #endif
-
 	if (!strcmp("whyred_ov13855_sunny_cn_i", s_ctrl->sensordata->sensor_name)) {
 		rc = msm_sensor_get_sensor_id_ovti_13855(s_ctrl,sensor_fusion_id_tmp);
-		if (rc < 0)
+		if (rc < 0){
 			pr_err("%s:%d lct read sensor %s fusion id failed\n",
 					__func__, __LINE__,
 					s_ctrl->sensordata->sensor_name);
+		}
 	}
 
 	CDBG("%s:%d lct read sensor fusion id %s\n", __func__, __LINE__,
 			sensor_fusion_id_tmp);
-
 #ifdef CONFIG_MACH_XIAOMI_TULIP
 	if (s_ctrl->sensordata->sensor_info->position != BACK_CAMERA_B) {
 #endif
@@ -1366,11 +1356,11 @@ static ssize_t msm_sensor_id_show(struct device *dev,
 
 	sprintf(buf, "%s", sensor_fusion_id);
 
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-	rc = strlen(buf);
-#else
-	rc = strlen(buf) + 1;
+	rc = strlen(buf)
+#ifndef CONFIG_MACH_XIAOMI_TULIP
+		+ 1
 #endif
+	;
 
 	return rc;
 }
@@ -1387,17 +1377,15 @@ int32_t msm_sensorid_init_device_name(void)
 		pr_err("Macle android_camera already created\n");
 		return 0;
 	}
-
 	msm_sensorid_device = kobject_create_and_add("camera_sensorid", NULL);
 	if (msm_sensorid_device == NULL) {
-		pr_err("%s: subsystem_register failed\n", __func__);
+		printk("%s: subsystem_register failed\n", __func__);
 		rc = -ENOMEM;
 		return rc;
 	}
-
 	rc = sysfs_create_file(msm_sensorid_device, &dev_attr_sensorid.attr);
 	if (rc) {
-		pr_err("%s: sysfs_create_file failed\n", __func__);
+		printk("%s: sysfs_create_file failed\n", __func__);
 		kobject_del(msm_sensorid_device);
 	}
 
@@ -1417,7 +1405,8 @@ int32_t msm_sensor_driver_probe(void *setting,
 
 	unsigned long                        mount_pos = 0;
 	uint32_t                             is_yuv;
-#if defined(CONFIG_MACH_XIAOMI_TULIP) || defined(CONFIG_MACH_XIAOMI_WHYRED)
+
+#if defined(CONFIG_MACH_XIAOMI_LAVENDER) || defined(CONFIG_MACH_XIAOMI_TULIP) || defined(CONFIG_MACH_XIAOMI_WHYRED)
 	uint32_t                             i = 0;
 #endif
 
@@ -1431,7 +1420,6 @@ int32_t msm_sensor_driver_probe(void *setting,
 	slave_info = kzalloc(sizeof(*slave_info), GFP_KERNEL);
 	if (!slave_info)
 		return -ENOMEM;
-
 #ifdef CONFIG_COMPAT
 	if (is_compat_task()) {
 		struct msm_camera_sensor_slave_info32 *slave_info32 =
@@ -1448,7 +1436,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 				rc = -EFAULT;
 				kfree(slave_info32);
 				goto free_slave_info;
-		}
+			}
 
 		strlcpy(slave_info->actuator_name, slave_info32->actuator_name,
 			sizeof(slave_info->actuator_name));
@@ -1470,12 +1458,9 @@ int32_t msm_sensor_driver_probe(void *setting,
 
 		slave_info->i2c_freq_mode = slave_info32->i2c_freq_mode;
 		slave_info->sensor_id_info = slave_info32->sensor_id_info;
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 		slave_info->vendor_id_info = slave_info32->vendor_id_info;
 		slave_info->vcm_id_info = slave_info32->vcm_id_info;
-#endif
-#ifdef CONFIG_XIAOMI_NEW_CAMERA_BLOBS
-		slave_info->lens_id_info = slave_info32->lens_id_info;
 #endif
 
 		slave_info->slave_addr = slave_info32->slave_addr;
@@ -1524,15 +1509,47 @@ int32_t msm_sensor_driver_probe(void *setting,
 		goto free_slave_info;
 	}
 
-#ifdef CONFIG_MACH_LONGCHEER
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-	if ((strcmp(slave_info->eeprom_name,"tulip_s5k5e8_ofilm_i") == 0) ||
-		(strcmp(slave_info->eeprom_name,"tulip_s5k5e8_qtech_ii") == 0) ||
-		(strcmp(slave_info->eeprom_name,"tulip_ov02a10_ofilm_ii") == 0) ||
-		(strcmp(slave_info->eeprom_name,"tulip_ov02a10_sunny_i") == 0)) {
+#ifdef CONFIG_MACH_XIAOMI_LAVENDER
+	if ((strcmp(slave_info->eeprom_name, "lavender_s5k5e8_ofilm_i") == 0) ||
+	    (strcmp(slave_info->eeprom_name, "lavender_s5k5e8_sunny_ii") == 0) ||
+	    (strcmp(slave_info->eeprom_name, "lavender_ov02a10_ofilm_i") == 0) ||
+	    (strcmp(slave_info->eeprom_name, "lavender_ov02a10_sunny_ii") == 0)) {
 		for (i = 0; i < CAMERA_VENDOR_EEPROM_COUNT_MAX; i++) {
 			if (s_vendor_eeprom[i].eeprom_name != NULL) {
-				pr_info("slave_info->eeprom_name=%s, s_vendor_eeprom[%d]=%s, module_id=%d\n",
+				printk(" slave_info->eeprom_name=%s, s_vendor_eeprom[%d]=%s, module_id=%d,\n",
+					slave_info->eeprom_name, i, s_vendor_eeprom[i].eeprom_name, s_vendor_eeprom[i].module_id);
+				if (strcmp(slave_info->eeprom_name, s_vendor_eeprom[i].eeprom_name) == 0) {
+					if (((strcmp(slave_info->eeprom_name, "lavender_s5k5e8_ofilm_i") == 0) &&
+						(s_vendor_eeprom[i].module_id == MID_OFILM)) ||
+					    ((strcmp(slave_info->eeprom_name, "lavender_s5k5e8_sunny_ii") == 0) &&
+						(s_vendor_eeprom[i].module_id == MID_SUNNY)) ||
+					    ((strcmp(slave_info->eeprom_name, "lavender_ov02a10_ofilm_i") == 0) &&
+						(s_vendor_eeprom[i].module_id == MID_OFILM)) ||
+					    ((strcmp(slave_info->eeprom_name, "lavender_ov02a10_sunny_ii") == 0) &&
+						(s_vendor_eeprom[i].module_id == MID_SUNNY))) {
+							printk("Lc module found!probe continue!\n");
+						break;
+					}
+				}
+			}
+		}
+
+		if (i >= CAMERA_VENDOR_EEPROM_COUNT_MAX) {
+			pr_err(" Lc module not found!probe break failed!\n");
+			rc = -EFAULT;
+			goto free_slave_info;
+		}
+	}
+#endif
+
+#ifdef CONFIG_MACH_XIAOMI_TULIP
+	if ((strcmp(slave_info->eeprom_name,"tulip_s5k5e8_ofilm_i") == 0) ||
+	    (strcmp(slave_info->eeprom_name,"tulip_s5k5e8_qtech_ii") == 0) ||
+	    (strcmp(slave_info->eeprom_name,"tulip_ov02a10_ofilm_ii") == 0) ||
+	    (strcmp(slave_info->eeprom_name,"tulip_ov02a10_sunny_i") == 0)) {
+		for (i = 0; i < CAMERA_VENDOR_EEPROM_COUNT_MAX; i++) {
+			if (s_vendor_eeprom[i].eeprom_name != NULL) {
+				printk(" slave_info->eeprom_name=%s, s_vendor_eeprom[%d]=%s, module_id=%d\n",
 					slave_info->eeprom_name, i, s_vendor_eeprom[i].eeprom_name, s_vendor_eeprom[i].module_id);
 				if (strcmp(slave_info->eeprom_name, s_vendor_eeprom[i].eeprom_name) == 0) {
 					if (((strcmp(slave_info->eeprom_name, "tulip_s5k5e8_ofilm_i") == 0) &&
@@ -1543,34 +1560,42 @@ int32_t msm_sensor_driver_probe(void *setting,
 						(s_vendor_eeprom[i].module_id == MID_OFILM)) ||
 					    ((strcmp(slave_info->eeprom_name, "tulip_ov02a10_sunny_i") == 0) &&
 						(s_vendor_eeprom[i].module_id == MID_SUNNY))) {
-							pr_info("Lc module found! probe continue!\n");
+							printk("Lc module found!probe continue!\n");
 						break;
 					}
 				}
 			}
 		}
-#else
+
+		if (i >= CAMERA_VENDOR_EEPROM_COUNT_MAX) {
+			pr_err(" Lc module not found!probe break failed!\n");
+			rc = -EFAULT;
+			goto free_slave_info;
+		}
+	}
+#endif
+
+#ifdef CONFIG_MACH_XIAOMI_WHYRED
 	if ((strcmp(slave_info->eeprom_name,"whyred_s5k5e8_ofilm_i") == 0) ||
-		(strcmp(slave_info->eeprom_name,"whyred_s5k5e8_qtech_ii") == 0)) {
+	    (strcmp(slave_info->eeprom_name,"whyred_s5k5e8_qtech_ii") == 0)) {
 		for (i = 0; i < CAMERA_VENDOR_EEPROM_COUNT_MAX; i++) {
 			if (s_vendor_eeprom[i].eeprom_name != NULL) {
-				CDBG("slave_info->eeprom_name=%s, s_vendor_eeprom[%d]=%s, module_id=%d\n",
+				printk(" slave_info->eeprom_name=%s, s_vendor_eeprom[%d]=%s, module_id=%d\n",
 					slave_info->eeprom_name, i, s_vendor_eeprom[i].eeprom_name, s_vendor_eeprom[i].module_id);
 				if (strcmp(slave_info->eeprom_name, s_vendor_eeprom[i].eeprom_name) == 0) {
 					if (((strcmp(slave_info->eeprom_name,"whyred_s5k5e8_ofilm_i") == 0) &&
 						(s_vendor_eeprom[i].module_id == MID_OFILM)) ||
 					    ((strcmp(slave_info->eeprom_name,"whyred_s5k5e8_qtech_ii") == 0) &&
 						(s_vendor_eeprom[i].module_id == MID_QTECH))) {
-							CDBG("Lc module found! probe continue!\n");
+							printk("Lc module found!probe continue!\n");
 						break;
 					}
 				}
 			}
 		}
-#endif
 
 		if (i >= CAMERA_VENDOR_EEPROM_COUNT_MAX) {
-			pr_err("Lc module not found! probe break failed!\n");
+			pr_err(" Lc module not found!probe break failed!\n");
 			rc = -EFAULT;
 			goto free_slave_info;
 		}
@@ -1632,7 +1657,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 		if (slave_info->sensor_id_info.sensor_id ==
 			s_ctrl->sensordata->cam_slave_info->
 				sensor_id_info.sensor_id &&
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 			slave_info->vendor_id_info.vendor_id ==
 			s_ctrl->sensordata->cam_slave_info->
 				vendor_id_info.vendor_id &&
@@ -1670,7 +1695,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 
 	camera_info = kzalloc(sizeof(struct msm_camera_slave_info), GFP_KERNEL);
 	if (!camera_info)
-		goto free_power_settings;
+		goto free_slave_info;
 
 	s_ctrl->sensordata->slave_info = camera_info;
 
@@ -1737,14 +1762,10 @@ CSID_TG:
 	s_ctrl->sensordata->actuator_name = slave_info->actuator_name;
 	s_ctrl->sensordata->ois_name = slave_info->ois_name;
 	s_ctrl->sensordata->flash_name = slave_info->flash_name;
-#ifdef CONFIG_MACH_LONGCHEER
+#ifdef CONFIG_MACH_XIAOMI_SDM660
 	s_ctrl->sensordata->vendor_id_info = &(slave_info->vendor_id_info);
 	s_ctrl->sensordata->vcm_id_info = &(slave_info->vcm_id_info);
 #endif
-#ifdef CONFIG_XIAOMI_NEW_CAMERA_BLOBS
-	s_ctrl->sensordata->lens_id_info = &(slave_info->lens_id_info);
-#endif
-
 	/*
 	 * Update eeporm subdevice Id by input eeprom name
 	 */
@@ -1853,7 +1874,6 @@ CSID_TG:
 	/* Power down */
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 #endif
-
 	/*
 	 * Set probe succeeded flag to 1 so that no other camera shall
 	 * probed on this slot
@@ -1865,9 +1885,6 @@ camera_power_down:
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 free_camera_info:
 	kfree(camera_info);
-free_power_settings:
-	kfree(s_ctrl->sensordata->power_info.power_setting);
-	kfree(s_ctrl->sensordata->power_info.power_down_setting);
 free_slave_info:
 	kfree(slave_info);
 	return rc;

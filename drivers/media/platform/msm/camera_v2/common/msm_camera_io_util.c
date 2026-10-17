@@ -583,12 +583,9 @@ disable_vreg:
 		} else
 			j = i;
 #ifdef CONFIG_MACH_LONGCHEER
-		if (reg_ptr[j] != NULL) {
+		if (reg_ptr[j] != NULL)
 #endif
 		regulator_disable(reg_ptr[j]);
-#ifdef CONFIG_MACH_LONGCHEER
-		}
-#endif
 		if (cam_vreg[j].delay > 20)
 			msleep(cam_vreg[j].delay);
 		else if (cam_vreg[j].delay)
@@ -777,7 +774,7 @@ int msm_camera_request_gpio_table(struct gpio *gpio_tbl, uint8_t size,
 				 * apply new gpios, outout a error message
 				 * for driver bringup debug
 				 */
-				CDBG("%s:%d gpio %d:%s request fails\n",
+				pr_err("%s:%d gpio %d:%s request fails\n",
 					__func__, __LINE__,
 					gpio_tbl[i].gpio, gpio_tbl[i].label);
 			}

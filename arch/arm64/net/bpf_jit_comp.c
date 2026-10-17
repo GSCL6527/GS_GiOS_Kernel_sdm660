@@ -27,6 +27,7 @@
 #include <asm/cacheflush.h>
 #include <asm/debug-monitors.h>
 #include <asm/set_memory.h>
+#include <trace/hooks/memory.h>
 
 #include "bpf_jit.h"
 
@@ -351,7 +352,8 @@ static void build_epilogue(struct jit_ctx *ctx)
  * >0 - successfully JITed a 16-byte eBPF instruction.
  * <0 - failed to JIT.
  */
-static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
+static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx,
+		      bool extra_pass)
 {
 	const u8 code = insn->code;
 	const u8 dst = bpf2a64[insn->dst_reg];
@@ -362,7 +364,8 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 	const s16 off = insn->off;
 	const s32 imm = insn->imm;
 	const int i = insn - ctx->prog->insnsi;
-	const bool is64 = BPF_CLASS(code) == BPF_ALU64;
+	const bool is64 = BPF_CLASS(code) == BPF_ALU64 ||
+			  BPF_CLASS(code) == BPF_JMP;
 	const bool isdw = BPF_SIZE(code) == BPF_DW;
 	u8 jmp_cond, reg;
 	s32 jmp_offset;
@@ -548,16 +551,26 @@ emit_bswap_uxt:
 		break;
 	/* IF (dst COND src) JUMP off */
 	case BPF_JMP | BPF_JEQ | BPF_X:
+	case BPF_JMP32 | BPF_JEQ | BPF_X:
 	case BPF_JMP | BPF_JGT | BPF_X:
+	case BPF_JMP32 | BPF_JGT | BPF_X:
 	case BPF_JMP | BPF_JLT | BPF_X:
+	case BPF_JMP32 | BPF_JLT | BPF_X:
 	case BPF_JMP | BPF_JGE | BPF_X:
+	case BPF_JMP32 | BPF_JGE | BPF_X:
 	case BPF_JMP | BPF_JLE | BPF_X:
+	case BPF_JMP32 | BPF_JLE | BPF_X:
 	case BPF_JMP | BPF_JNE | BPF_X:
+	case BPF_JMP32 | BPF_JNE | BPF_X:
 	case BPF_JMP | BPF_JSGT | BPF_X:
+	case BPF_JMP32 | BPF_JSGT | BPF_X:
 	case BPF_JMP | BPF_JSLT | BPF_X:
+	case BPF_JMP32 | BPF_JSLT | BPF_X:
 	case BPF_JMP | BPF_JSGE | BPF_X:
+	case BPF_JMP32 | BPF_JSGE | BPF_X:
 	case BPF_JMP | BPF_JSLE | BPF_X:
-		emit(A64_CMP(1, dst, src), ctx);
+	case BPF_JMP32 | BPF_JSLE | BPF_X:
+		emit(A64_CMP(is64, dst, src), ctx);
 emit_cond_jmp:
 		jmp_offset = bpf2a64_offset(i + off, i, ctx);
 		check_imm19(jmp_offset);
@@ -599,36 +612,52 @@ emit_cond_jmp:
 		emit(A64_B_(jmp_cond, jmp_offset), ctx);
 		break;
 	case BPF_JMP | BPF_JSET | BPF_X:
-		emit(A64_TST(1, dst, src), ctx);
+	case BPF_JMP32 | BPF_JSET | BPF_X:
+		emit(A64_TST(is64, dst, src), ctx);
 		goto emit_cond_jmp;
 	/* IF (dst COND imm) JUMP off */
 	case BPF_JMP | BPF_JEQ | BPF_K:
+	case BPF_JMP32 | BPF_JEQ | BPF_K:
 	case BPF_JMP | BPF_JGT | BPF_K:
+	case BPF_JMP32 | BPF_JGT | BPF_K:
 	case BPF_JMP | BPF_JLT | BPF_K:
+	case BPF_JMP32 | BPF_JLT | BPF_K:
 	case BPF_JMP | BPF_JGE | BPF_K:
+	case BPF_JMP32 | BPF_JGE | BPF_K:
 	case BPF_JMP | BPF_JLE | BPF_K:
+	case BPF_JMP32 | BPF_JLE | BPF_K:
 	case BPF_JMP | BPF_JNE | BPF_K:
+	case BPF_JMP32 | BPF_JNE | BPF_K:
 	case BPF_JMP | BPF_JSGT | BPF_K:
+	case BPF_JMP32 | BPF_JSGT | BPF_K:
 	case BPF_JMP | BPF_JSLT | BPF_K:
+	case BPF_JMP32 | BPF_JSLT | BPF_K:
 	case BPF_JMP | BPF_JSGE | BPF_K:
+	case BPF_JMP32 | BPF_JSGE | BPF_K:
 	case BPF_JMP | BPF_JSLE | BPF_K:
-		emit_a64_mov_i(1, tmp, imm, ctx);
-		emit(A64_CMP(1, dst, tmp), ctx);
+	case BPF_JMP32 | BPF_JSLE | BPF_K:
+		emit_a64_mov_i(is64, tmp, imm, ctx);
+		emit(A64_CMP(is64, dst, tmp), ctx);
 		goto emit_cond_jmp;
 	case BPF_JMP | BPF_JSET | BPF_K:
-		emit_a64_mov_i(1, tmp, imm, ctx);
-		emit(A64_TST(1, dst, tmp), ctx);
+	case BPF_JMP32 | BPF_JSET | BPF_K:
+		emit_a64_mov_i(is64, tmp, imm, ctx);
+		emit(A64_TST(is64, dst, tmp), ctx);
 		goto emit_cond_jmp;
 	/* function call */
 	case BPF_JMP | BPF_CALL:
 	{
 		const u8 r0 = bpf2a64[BPF_REG_0];
-		const u64 func = (u64)__bpf_call_base + imm;
+		u64 func_addr;
+		bool func_addr_fixed;
+		int ret;
 
-		if (ctx->prog->is_func)
-			emit_addr_mov_i64(tmp, func, ctx);
-		else
-			emit_a64_mov_i64(tmp, func, ctx);
+		ret = bpf_jit_get_func_addr(ctx->prog, insn, extra_pass,
+					    &func_addr, &func_addr_fixed);
+		if (ret < 0)
+			return ret;
+		/* Subprogram addresses are resolved during the extra JIT pass. */
+		emit_addr_mov_i64(tmp, func_addr, ctx);
 		emit(A64_BLR(tmp), ctx);
 		emit(A64_MOV(1, r0, A64_R(0)), ctx);
 		break;
@@ -773,7 +802,7 @@ emit_cond_jmp:
 	return 0;
 }
 
-static int build_body(struct jit_ctx *ctx)
+static int build_body(struct jit_ctx *ctx, bool extra_pass)
 {
 	const struct bpf_prog *prog = ctx->prog;
 	int i;
@@ -782,7 +811,7 @@ static int build_body(struct jit_ctx *ctx)
 		const struct bpf_insn *insn = &prog->insnsi[i];
 		int ret;
 
-		ret = build_insn(insn, ctx);
+		ret = build_insn(insn, ctx, extra_pass);
 		if (ret > 0) {
 			i++;
 			if (ctx->image == NULL)
@@ -878,7 +907,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	/* 1. Initial fake pass to compute ctx->idx. */
 
 	/* Fake pass to fill in ctx->offset. */
-	if (build_body(&ctx)) {
+	if (build_body(&ctx, extra_pass)) {
 		prog = orig_prog;
 		goto out_off;
 	}
@@ -908,7 +937,7 @@ skip_init_ctx:
 
 	build_prologue(&ctx, was_classic);
 
-	if (build_body(&ctx)) {
+	if (build_body(&ctx, extra_pass)) {
 		bpf_jit_binary_free(header);
 		prog = orig_prog;
 		goto out_off;
@@ -940,6 +969,8 @@ skip_init_ctx:
 			goto out_off;
 		}
 		bpf_jit_binary_lock_ro(header);
+		trace_android_vh_set_memory_ro((unsigned long)header, header->pages);
+		trace_android_vh_set_memory_x((unsigned long)header, header->pages);
 	} else {
 		jit_data->ctx = ctx;
 		jit_data->image = image_ptr;
@@ -974,18 +1005,3 @@ void bpf_jit_free_exec(void *addr)
 {
 	return vfree(addr);
 }
-
-#ifdef CONFIG_CFI_CLANG
-bool arch_bpf_jit_check_func(const struct bpf_prog *prog)
-{
-	const uintptr_t func = (const uintptr_t)prog->bpf_func;
-
-	/*
-	 * bpf_func must be correctly aligned and within the correct region.
-	 */
-	if (unlikely(!IS_ALIGNED(func, sizeof(u32))))
-		return false;
-
-	return (func >= BPF_JIT_REGION_START && func < BPF_JIT_REGION_END);
-}
-#endif

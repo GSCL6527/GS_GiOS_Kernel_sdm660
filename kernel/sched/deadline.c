@@ -2158,13 +2158,7 @@ retry:
 	sub_running_bw(&next_task->dl, &rq->dl);
 	sub_rq_bw(&next_task->dl, &rq->dl);
 	next_task->on_rq = TASK_ON_RQ_MIGRATING;
-#ifdef CONFIG_SONY_SCHED
-	walt_prepare_migrate(next_task, cpu_of(rq), cpu_of(later_rq), true);
-#endif
 	set_task_cpu(next_task, later_rq->cpu);
-#ifdef CONFIG_SONY_SCHED
-	walt_finish_migrate(next_task, cpu_of(rq), cpu_of(later_rq), true);
-#endif
 	next_task->on_rq = TASK_ON_RQ_QUEUED;
 	add_rq_bw(&next_task->dl, &later_rq->dl);
 
@@ -2264,13 +2258,7 @@ static void pull_dl_task(struct rq *this_rq)
 			sub_running_bw(&p->dl, &src_rq->dl);
 			sub_rq_bw(&p->dl, &src_rq->dl);
 			p->on_rq = TASK_ON_RQ_MIGRATING;
-#ifdef CONFIG_SONY_SCHED
-			walt_prepare_migrate(p, cpu_of(src_rq), cpu_of(this_rq), true);
-#endif
 			set_task_cpu(p, this_cpu);
-#ifdef CONFIG_SONY_SCHED
-			walt_finish_migrate(p, cpu_of(src_rq), cpu_of(this_rq), true);
-#endif
 			p->on_rq = TASK_ON_RQ_QUEUED;
 			add_rq_bw(&p->dl, &this_rq->dl);
 			add_running_bw(&p->dl, &this_rq->dl);
@@ -2528,7 +2516,7 @@ int sched_dl_global_validate(void)
 	 * cycling on root_domains... Discussion on different/better
 	 * solutions is welcome!
 	 */
-	for_each_possible_cpu(cpu) {
+	for_each_online_cpu(cpu) {
 		rcu_read_lock_sched();
 		dl_b = dl_bw_of(cpu);
 		cpus = dl_bw_cpus(cpu);

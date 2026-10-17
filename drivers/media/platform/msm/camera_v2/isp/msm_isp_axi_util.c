@@ -2197,8 +2197,7 @@ static void msm_isp_handle_done_buf_frame_id_mismatch(
 		ret = vfe_dev->buf_mgr->ops->buf_done(vfe_dev->buf_mgr,
 			buf->bufq_handle, buf->buf_idx, time_stamp,
 			frame_id,
-			stream_info->runtime_output_format,
-			VB2_BUF_STATE_ERROR);
+			stream_info->runtime_output_format);
 	if (ret == -EFAULT) {
 		msm_isp_halt_send_error(vfe_dev, ISP_EVENT_BUF_FATAL_ERROR);
 		return;
@@ -2276,8 +2275,7 @@ static int msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 				vfe_dev->buf_mgr,
 				buf->bufq_handle, buf->buf_idx,
 				time_stamp, frame_id,
-				stream_info->runtime_output_format,
-				VB2_BUF_STATE_DONE);
+				stream_info->runtime_output_format);
 
 		if (rc == -EFAULT) {
 			msm_isp_halt_send_error(vfe_dev,
@@ -2345,8 +2343,7 @@ static int msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 		buf->buf_debug.put_state_last ^= 1;
 		rc = vfe_dev->buf_mgr->ops->buf_done(vfe_dev->buf_mgr,
 		 buf->bufq_handle, buf->buf_idx, time_stamp,
-		 frame_id, stream_info->runtime_output_format,
-		 VB2_BUF_STATE_DONE);
+		 frame_id, stream_info->runtime_output_format);
 		if (rc == -EFAULT) {
 			msm_isp_halt_send_error(vfe_dev,
 					ISP_EVENT_BUF_FATAL_ERROR);
@@ -3677,11 +3674,10 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	buf->buf_debug.put_state[buf->buf_debug.put_state_last] =
 		MSM_ISP_BUFFER_STATE_DROP_REG;
 	buf->buf_debug.put_state_last ^= 1;
-	rc = vfe_dev->buf_mgr->ops->buf_done(vfe_dev->buf_mgr,
+	rc = vfe_dev->buf_mgr->ops->buf_err(vfe_dev->buf_mgr,
 		buf->bufq_handle, buf->buf_idx,
 		&timestamp.buf_time, frame_id,
-		stream_info->runtime_output_format,
-		VB2_BUF_STATE_ERROR);
+		stream_info->runtime_output_format);
 	if (rc == -EFAULT) {
 		msm_isp_halt_send_error(vfe_dev,
 			ISP_EVENT_BUF_FATAL_ERROR);

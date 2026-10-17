@@ -1,3 +1,4 @@
+#include <linux/sched/signal.h>
 #include <linux/atomic.h>
 #include <linux/rwsem.h>
 #include <linux/percpu.h>

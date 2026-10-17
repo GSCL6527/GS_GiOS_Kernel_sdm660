@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/fs.h>
+#include <linux/fs_context.h>
 #include <linux/mount.h>
 #include <linux/mutex.h>
 #include <linux/init.h>
@@ -169,11 +170,10 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 			goto out;
 		audit_log(audit_context(), GFP_KERNEL, AUDIT_MAC_STATUS,
 			"enforcing=%d old_enforcing=%d auid=%u ses=%u"
-			" enabled=%d old-enabled=%d lsm=selinux res=1",
+			" enabled=1 old-enabled=1 lsm=selinux res=1",
 			new_value, old_value,
 			from_kuid(&init_user_ns, audit_get_loginuid(current)),
-			audit_get_sessionid(current),
-			selinux_enabled, selinux_enabled);
+			audit_get_sessionid(current));
 		enforcing_set(state, new_value);
 		if (new_value)
 			avc_ss_reset(state->avc, 0);
@@ -265,7 +265,7 @@ static int sel_mmap_handle_status(struct file *filp,
 			       size, vma->vm_page_prot);
 }
 
-static const struct file_operations sel_handle_status_ops = {
+const struct file_operations sel_handle_status_ops = {
 	.open		= sel_open_handle_status,
 	.read		= sel_read_handle_status,
 	.mmap		= sel_mmap_handle_status,
@@ -282,6 +282,13 @@ static ssize_t sel_write_disable(struct file *file, const char __user *buf,
 	ssize_t length;
 	int new_value;
 	int enforcing;
+
+	/* NOTE: we are now officially considering runtime disable as
+	 *       deprecated, and using it will become increasingly painful
+	 *       (e.g. sleeping/blocking) as we progress through future
+	 *       kernel releases until eventually it is removed
+	 */
+	pr_err("SELinux:  Runtime disable is deprecated, use selinux=0 on the kernel cmdline.\n");
 
 	if (count >= PAGE_SIZE)
 		return -ENOMEM;
@@ -305,10 +312,10 @@ static ssize_t sel_write_disable(struct file *file, const char __user *buf,
 			goto out;
 		audit_log(audit_context(), GFP_KERNEL, AUDIT_MAC_STATUS,
 			"enforcing=%d old_enforcing=%d auid=%u ses=%u"
-			" enabled=%d old-enabled=%d lsm=selinux res=1",
+			" enabled=0 old-enabled=1 lsm=selinux res=1",
 			enforcing, enforcing,
 			from_kuid(&init_user_ns, audit_get_loginuid(current)),
-			audit_get_sessionid(current), 0, 1);
+			audit_get_sessionid(current));
 	}
 
 	length = count;
@@ -767,7 +774,7 @@ static ssize_t sel_write_relabel(struct file *file, char *buf, size_t size);
 static ssize_t sel_write_user(struct file *file, char *buf, size_t size);
 static ssize_t sel_write_member(struct file *file, char *buf, size_t size);
 
-static ssize_t (*const write_op[])(struct file *, char *, size_t) = {
+ssize_t (*const write_op[])(struct file *, char *, size_t) = {
 	[SEL_ACCESS] = sel_write_access,
 	[SEL_CREATE] = sel_write_create,
 	[SEL_RELABEL] = sel_write_relabel,
@@ -1735,7 +1742,7 @@ static ssize_t sel_read_class(struct file *file, char __user *buf,
 {
 	unsigned long ino = file_inode(file)->i_ino;
 	char res[TMPBUFLEN];
-	ssize_t len = snprintf(res, sizeof(res), "%d", sel_ino_to_class(ino));
+	ssize_t len = scnprintf(res, sizeof(res), "%d", sel_ino_to_class(ino));
 	return simple_read_from_buffer(buf, count, ppos, res, len);
 }
 
@@ -1749,7 +1756,7 @@ static ssize_t sel_read_perm(struct file *file, char __user *buf,
 {
 	unsigned long ino = file_inode(file)->i_ino;
 	char res[TMPBUFLEN];
-	ssize_t len = snprintf(res, sizeof(res), "%d", sel_ino_to_perm(ino));
+	ssize_t len = scnprintf(res, sizeof(res), "%d", sel_ino_to_perm(ino));
 	return simple_read_from_buffer(buf, count, ppos, res, len);
 }
 
@@ -1951,7 +1958,7 @@ static struct dentry *sel_make_dir(struct dentry *dir, const char *name,
 
 #define NULL_FILE_NAME "null"
 
-static int sel_fill_super(struct super_block *sb, void *data, int silent)
+static int sel_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	struct selinux_fs_info *fsi;
 	int ret;
@@ -2077,10 +2084,19 @@ err:
 	return ret;
 }
 
-static struct dentry *sel_mount(struct file_system_type *fs_type,
-		      int flags, const char *dev_name, void *data)
+static int sel_get_tree(struct fs_context *fc)
 {
-	return mount_single(fs_type, flags, data, sel_fill_super);
+	return get_tree_single(fc, sel_fill_super);
+}
+
+static const struct fs_context_operations sel_context_ops = {
+	.get_tree	= sel_get_tree,
+};
+
+static int sel_init_fs_context(struct fs_context *fc)
+{
+	fc->ops = &sel_context_ops;
+	return 0;
 }
 
 static void sel_kill_sb(struct super_block *sb)
@@ -2091,7 +2107,7 @@ static void sel_kill_sb(struct super_block *sb)
 
 static struct file_system_type sel_fs_type = {
 	.name		= "selinuxfs",
-	.mount		= sel_mount,
+	.init_fs_context = sel_init_fs_context,
 	.kill_sb	= sel_kill_sb,
 };
 
@@ -2104,7 +2120,7 @@ static int __init init_sel_fs(void)
 					  sizeof(NULL_FILE_NAME)-1);
 	int err;
 
-	if (!selinux_enabled)
+	if (!selinux_enabled_boot)
 		return 0;
 
 	err = sysfs_create_mount_point(fs_kobj, "selinux");

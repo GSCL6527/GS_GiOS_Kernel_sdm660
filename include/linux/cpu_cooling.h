@@ -61,6 +61,18 @@ void cpu_limits_set_level(unsigned int cpu, unsigned int max_freq);
 #endif
 
 /**
+ * cpufreq_platform_cooling_register - create cpufreq cooling device with
+ * additional platform specific mitigation function.
+ *
+ * @policy: cpufreq policy
+ * @plat_ops: the platform mitigation functions that will be called insted of
+ * cpufreq, if provided.
+ */
+struct thermal_cooling_device *
+cpufreq_platform_cooling_register(struct cpufreq_policy *policy,
+					struct cpu_cooling_ops *ops);
+
+/**
  * cpufreq_cooling_unregister - function to remove cpufreq cooling device.
  * @cdev: thermal cooling device pointer.
  */

@@ -1,0 +1,3 @@
+# Replaces the ported ROM rule targeting missing /sys/touchpanel/oplus_backlight.
+on property:debug.tracing.screen_brightness=*
+    exec - root root -- /vendor/bin/sh /vendor/bin/lkgeek-oplus-backlight.sh ${debug.tracing.screen_brightness}

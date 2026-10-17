@@ -645,6 +645,19 @@ __wlan_hdd_cfg80211_apf_offload(struct wiphy *wiphy,
 	}
 	apf_subcmd = nla_get_u32(tb[APF_SUBCMD]);
 
+	/* Legacy APF firmware has no work-memory/interpreter control API. */
+	switch (apf_subcmd) {
+	case QCA_WLAN_WRITE_PACKET_FILTER:
+	case QCA_WLAN_READ_PACKET_FILTER:
+	case QCA_WLAN_ENABLE_PACKET_FILTER:
+	case QCA_WLAN_DISABLE_PACKET_FILTER:
+		if (hdd_ctx->apf_version <= 2)
+			return -EOPNOTSUPP;
+		break;
+	default:
+		break;
+	}
+
 	/* Do not allow simultaneous new APF commands on the same adapter */
 	qdf_spin_lock(&context->lock);
 	if (context->cmd_in_progress) {

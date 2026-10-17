@@ -40,7 +40,7 @@
 #include <asm/idmap.h>
 #include <asm/topology.h>
 #include <asm/mmu_context.h>
-#include <asm/pgtable.h>
+#include <linux/pgtable.h>
 #include <asm/pgalloc.h>
 #include <asm/procinfo.h>
 #include <asm/processor.h>
@@ -52,6 +52,8 @@
 #include <asm/mach/arch.h>
 #include <asm/mpu.h>
 #include <soc/qcom/minidump.h>
+
+#include <soc/qcom/lpm_levels.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
@@ -725,6 +727,8 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 void smp_send_reschedule(int cpu)
 {
+	if (__smp_update_ipi_history_cb)
+		__smp_update_ipi_history_cb(cpu);
 	smp_cross_call_common(cpumask_of(cpu), IPI_RESCHEDULE);
 }
 

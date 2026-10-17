@@ -6,6 +6,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/ktime.h>
+#include <linux/limits.h>
 #include <linux/of.h>
 #include <linux/spinlock.h>
 #include <linux/alarmtimer.h>
@@ -512,8 +513,10 @@ static DEVICE_ATTR_RW(sram_dump_period_ms);
 
 static int fg_restart_mp;
 static bool fg_sram_dump;
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-extern int rradc_die;
+#ifdef CONFIG_MACH_LONGCHEER
+int hwc_check_india;
+int hwc_check_global;
+extern bool is_poweroff_charge;
 #endif
 
 /* All getters HERE */
@@ -607,9 +610,6 @@ static int fg_get_battery_temp(struct fg_dev *fg, int *val)
 {
 	int rc = 0, temp;
 	u8 buf[2];
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-	struct thermal_zone_device *quiet_them;
-#endif
 
 	rc = fg_read(fg, BATT_INFO_BATT_TEMP_LSB(fg), buf, 2);
 	if (rc < 0) {
@@ -620,68 +620,61 @@ static int fg_get_battery_temp(struct fg_dev *fg, int *val)
 
 	temp = ((buf[1] & BATT_TEMP_MSB_MASK) << 8) |
 		(buf[0] & BATT_TEMP_LSB_MASK);
-	/* Value is in 0.25Kelvin; Convert it to deciDegC */
-	*val = DIV_ROUND_CLOSEST((temp - 273*4) * 10, 4);
+	temp = DIV_ROUND_CLOSEST(temp, 4);
+
+	/* Value is in Kelvin; Convert it to deciDegC */
+	temp = (temp - 273) * 10;
 #ifdef CONFIG_MACH_LONGCHEER
 #ifdef CONFIG_MACH_XIAOMI_TULIP
 	if (temp < -40) {
 		switch (temp) {
-		case -50:
-			temp = -70;
-			break;
-		case -60:
-			temp = -80;
-			break;
-		case -70:
-			temp = -90;
-			break;
-		case -80:
-			temp = -100;
-			break;
+			case -50:
+				temp = -70;
+				break;
+			case -60:
+				temp = -80;
+				break;
+			case -70:
+				temp = -90;
+				break;
+			case -80:
+				temp = -100;
+				break;
 #else
 	if (temp < -80) {
 		switch (temp) {
 #endif
-		case -90:
-			temp = -110;
-			break;
-		case -100:
-			temp = -120;
-			break;
-		case -110:
-			temp = -130;
-			break;
-		case -120:
-			temp = -150;
-			break;
-		case -130:
-			temp = -170;
-			break;
-		case -140:
-			temp = -190;
-			break;
-		case -150:
-			temp = -200;
-			break;
-		case -160:
-			temp = -210;
-			break;
-		default:
-			temp -= 50;
-			break;
+			case -90:
+				temp = -110;
+				break;
+			case -100:
+				temp = -120;
+				break;
+			case -110:
+				temp = -130;
+				break;
+			case -120:
+				temp = -150;
+				break;
+			case -130:
+				temp = -170;
+				break;
+			case -140:
+				temp = -190;
+				break;
+			case -150:
+				temp = -200;
+				break;
+			case -160:
+				temp = -210;
+				break;
+			default:
+				temp -= 50;
+				break;
 		};
 	}
-
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-	if (rradc_die) {
-		quiet_them = thermal_zone_get_zone_by_name("quiet_therm");
-		if (quiet_them)
-			rc = thermal_zone_get_temp(quiet_them, &temp);
-		temp = (temp - 3) * 10;
-		pr_debug("LCT USE QUIET_THERM AS BATTERY TEMP \n");
-	}
 #endif
-#endif
+	*val = temp;
 	return 0;
 }
 
@@ -869,6 +862,22 @@ out:
 	return rc;
 }
 
+#ifdef CONFIG_MACH_LONGCHEER
+static int __init hwc_setup(char *s)
+{
+	if (strcmp(s, "India") == 0)
+		hwc_check_india = 1;
+	else
+		hwc_check_india = 0;
+	if (strcmp(s, "Global") == 0)
+		hwc_check_global = 1;
+	else
+		hwc_check_global = 0;
+	return 1;
+}
+__setup("androidboot.hwc=", hwc_setup);
+#endif
+
 static int fg_get_batt_profile(struct fg_dev *fg)
 {
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
@@ -914,18 +923,25 @@ static int fg_get_batt_profile(struct fg_dev *fg)
 		fg->bp.fastchg_curr_ma = -EINVAL;
 	}
 
+#ifdef CONFIG_MACH_LONGCHEER
+	if (hwc_check_global)
+		fg->bp.fastchg_curr_ma = 2300;
+#ifdef CONFIG_MACH_XIAOMI_TULIP
+	else
+		if (is_poweroff_charge) {
+			if (hwc_check_india)
+				fg->bp.fastchg_curr_ma = 2200;
+			else
+				fg->bp.fastchg_curr_ma = 2300;
+		}
+#endif
+#endif
+
 	rc = of_property_read_u32(profile_node, "qcom,fg-cc-cv-threshold-mv",
 			&fg->bp.vbatt_full_mv);
 	if (rc < 0) {
 		pr_err("battery cc_cv threshold unavailable, rc:%d\n", rc);
 		fg->bp.vbatt_full_mv = -EINVAL;
-	}
-
-	rc = of_property_read_u32(profile_node, "qcom,nom-batt-capacity-mah",
-			&fg->bp.nom_cap_uah);
-	if (rc < 0) {
-		pr_err("battery nominal capacity unavailable, rc:%d\n", rc);
-		fg->bp.nom_cap_uah = -EINVAL;
 	}
 
 	data = of_get_property(profile_node, "qcom,fg-profile-data", &len);
@@ -940,6 +956,9 @@ static int fg_get_batt_profile(struct fg_dev *fg)
 		pr_err("No profile data available\n");
 		return -ENODATA;
 	}
+	if (fg->battery_full_design <= 0 ||
+	    fg->battery_full_design >= U16_MAX)
+		return -EINVAL;
 #endif
 
 	if (len != PROFILE_LEN) {
@@ -1066,14 +1085,20 @@ static int fg_prime_cc_soc_sw(struct fg_dev *fg, unsigned int cc_soc_sw)
 	return rc;
 }
 
+#define MAX_LEARNED_CAP_UAH	((U16_MAX - 1) * 1000)
+
 static int fg_save_learned_cap_to_sram(struct fg_dev *fg)
 {
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
-	int16_t cc_mah;
+	u16 cc_mah;
 	int rc;
 
 	if (fg->battery_missing || !chip->cl.learned_cc_uah)
 		return -EPERM;
+	/* Capacity is stored in unsigned 16-bit mAh; 0xffff is uninitialized. */
+	if (chip->cl.learned_cc_uah < 1000 ||
+	    chip->cl.learned_cc_uah > MAX_LEARNED_CAP_UAH)
+		return -EINVAL;
 
 	cc_mah = div64_s64(chip->cl.learned_cc_uah, 1000);
 	/* Write to a backup register to use across reboot */
@@ -1115,7 +1140,7 @@ static int fg_load_learned_cap_from_sram(struct fg_dev *fg)
 	chip->cl.learned_cc_uah = act_cap_mah * 1000;
 
 	if (chip->cl.learned_cc_uah != chip->cl.nom_cap_uah) {
-		if (chip->cl.learned_cc_uah == 0)
+		if (!chip->cl.learned_cc_uah || act_cap_mah == U16_MAX)
 			chip->cl.learned_cc_uah = chip->cl.nom_cap_uah;
 
 		delta_cc_uah = abs(chip->cl.learned_cc_uah -
@@ -1123,11 +1148,12 @@ static int fg_load_learned_cap_from_sram(struct fg_dev *fg)
 		pct_nom_cap_uah = div64_s64((int64_t)chip->cl.nom_cap_uah *
 				CAPACITY_DELTA_DECIPCT, 1000);
 		/*
-		 * If the learned capacity is out of range by 50% from the
-		 * nominal capacity, then overwrite the learned capacity with
-		 * the nominal capacity.
+		 * Keep the low-capacity corruption check. Larger replacement
+		 * packs must survive reboot when no upper learning limit is set.
 		 */
-		if (chip->cl.nom_cap_uah && delta_cc_uah > pct_nom_cap_uah) {
+		if (chip->cl.nom_cap_uah && delta_cc_uah > pct_nom_cap_uah &&
+		    (chip->cl.learned_cc_uah < chip->cl.nom_cap_uah ||
+		     chip->dt.cl_max_cap_limit)) {
 			fg_dbg(fg, FG_CAP_LEARN, "learned_cc_uah: %lld is higher than expected, capping it to nominal: %lld\n",
 				chip->cl.learned_cc_uah, chip->cl.nom_cap_uah);
 			chip->cl.learned_cc_uah = chip->cl.nom_cap_uah;
@@ -1937,15 +1963,19 @@ static int fg_adjust_recharge_voltage(struct fg_dev *fg)
 
 	/* Lower the recharge voltage in soft JEITA */
 #ifdef CONFIG_MACH_LONGCHEER
+#if defined(CONFIG_MACH_XIAOMI_WHYRED)
 	if (fg->health == POWER_SUPPLY_HEALTH_WARM)
 		recharge_volt_mv = 4050;
-#if defined(CONFIG_MACH_XIAOMI_WHYRED)
 	if (fg->health == POWER_SUPPLY_HEALTH_COOL)
 		recharge_volt_mv = 4282;
 #elif defined(CONFIG_MACH_XIAOMI_TULIP)
+	if (fg->health == POWER_SUPPLY_HEALTH_WARM)
+		recharge_volt_mv = 4050;
 	if (fg->health == POWER_SUPPLY_HEALTH_COOL)
 		recharge_volt_mv = 4250;
 #else
+	if (fg->health == POWER_SUPPLY_HEALTH_WARM)
+		recharge_volt_mv = 4050;
 	if (fg->health == POWER_SUPPLY_HEALTH_COOL)
 		recharge_volt_mv = 4280;
 #endif
@@ -2380,7 +2410,7 @@ static void fg_ttf_update(struct fg_dev *fg)
 	chip->ttf.last_ttf = 0;
 	chip->ttf.last_ms = 0;
 	mutex_unlock(&chip->ttf.lock);
-	queue_delayed_work(system_power_efficient_wq, &chip->ttf_work, msecs_to_jiffies(delay_ms));
+	schedule_delayed_work(&chip->ttf_work, msecs_to_jiffies(delay_ms));
 }
 
 static void restore_cycle_counter(struct fg_dev *fg)
@@ -2694,9 +2724,6 @@ static void status_change_work(struct work_struct *work)
 			struct fg_dev, status_change_work);
 	union power_supply_propval prop = {0, };
 	int rc, batt_temp;
-#if defined(CONFIG_MACH_XIAOMI_LAVENDER) || defined(CONFIG_MACH_XIAOMI_WAYNE)
-	int msoc;
-#endif
 
 	if (!batt_psy_initialized(fg)) {
 		fg_dbg(fg, FG_STATUS, "Charger not available?!\n");
@@ -2738,18 +2765,6 @@ static void status_change_work(struct work_struct *work)
 	fg->charge_done = prop.intval;
 	fg_cycle_counter_update(fg);
 	fg_cap_learning_update(fg);
-
-#if defined(CONFIG_MACH_XIAOMI_LAVENDER) || defined(CONFIG_MACH_XIAOMI_WAYNE)
-	if (fg->charge_done && !fg->report_full)
-		fg->report_full = true;
-	else if (!fg->charge_done && fg->report_full) {
-		rc = fg_get_msoc_raw(fg, &msoc);
-		if (rc < 0)
-			pr_err("Error in getting msoc, rc=%d\n", rc);
-		if (msoc < FULL_SOC_REPORT_THR - 4)
-			fg->report_full = false;
-	}
-#endif
 
 	rc = fg_charge_full_update(fg);
 	if (rc < 0)
@@ -3063,7 +3078,7 @@ done:
 out:
 	fg->soc_reporting_ready = true;
 	vote(fg->awake_votable, ESR_FCC_VOTER, true, 0);
-	queue_delayed_work(system_power_efficient_wq, &chip->pl_enable_work, msecs_to_jiffies(5000));
+	schedule_delayed_work(&chip->pl_enable_work, msecs_to_jiffies(5000));
 	vote(fg->awake_votable, PROFILE_LOAD, false, 0);
 	if (!work_pending(&fg->status_change_work)) {
 		fg_stay_awake(fg, FG_STATUS_NOTIFY_WAKE);
@@ -3096,7 +3111,7 @@ static void sram_dump_work(struct work_struct *work)
 	fg_dbg(fg, FG_STATUS, "SRAM Dump done at %lld.%d\n",
 		quotient, remainder);
 resched:
-	queue_delayed_work(system_power_efficient_wq, &fg->sram_dump_work,
+	schedule_delayed_work(&fg->sram_dump_work,
 			msecs_to_jiffies(fg_sram_dump_period_ms));
 }
 
@@ -3128,7 +3143,7 @@ static ssize_t sram_dump_en_store(struct device *dev, struct device_attribute
 	chip = power_supply_get_drvdata(bms_psy);
 	fg = &chip->fg;
 	if (fg_sram_dump)
-		queue_delayed_work(system_power_efficient_wq, &fg->sram_dump_work,
+		schedule_delayed_work(&fg->sram_dump_work,
 				msecs_to_jiffies(fg_sram_dump_period_ms));
 	else
 		cancel_delayed_work_sync(&fg->sram_dump_work);
@@ -3283,7 +3298,7 @@ static int fg_get_time_to_full_locked(struct fg_dev *fg, int *val)
 	/* clamp ibatt_avg to iterm */
 	if (ibatt_avg < abs(chip->dt.sys_term_curr_ma))
 		ibatt_avg = abs(chip->dt.sys_term_curr_ma);
-	
+
 	fg_dbg(fg, FG_TTF, "ibatt_avg=%d\n", ibatt_avg);
 	fg_dbg(fg, FG_TTF, "vbatt_avg=%d\n", vbatt_avg);
 
@@ -3723,7 +3738,7 @@ static void ttf_work(struct work_struct *work)
 		/* keep the wake lock and prime the IBATT and VBATT buffers */
 		if (ttf < 0) {
 			/* delay for one FG cycle */
-			queue_delayed_work(system_power_efficient_wq, &chip->ttf_work,
+			schedule_delayed_work(&chip->ttf_work,
 							msecs_to_jiffies(1500));
 			mutex_unlock(&chip->ttf.lock);
 			return;
@@ -3740,7 +3755,7 @@ static void ttf_work(struct work_struct *work)
 	}
 
 	/* recurse every 10 seconds */
-	queue_delayed_work(system_power_efficient_wq, &chip->ttf_work, msecs_to_jiffies(10000));
+	schedule_delayed_work(&chip->ttf_work, msecs_to_jiffies(10000));
 end_work:
 	vote(fg->awake_votable, TTF_PRIMING, false, 0);
 	mutex_unlock(&chip->ttf.lock);
@@ -3806,11 +3821,6 @@ static int fg_psy_get_property(struct power_supply *psy,
 			return rc;
 		}
 		break;
-#ifdef CONFIG_MACH_LONGCHEER
-	case POWER_SUPPLY_PROP_ONLINE:
-		pval->intval = fg->online_status;
-		break;
-#endif
 	case POWER_SUPPLY_PROP_RESISTANCE:
 		rc = fg_get_battery_resistance(fg, &pval->intval);
 		break;
@@ -3818,10 +3828,11 @@ static int fg_psy_get_property(struct power_supply *psy,
 		rc = fg_get_sram_prop(fg, FG_SRAM_OCV, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		if (fg->bp.nom_cap_uah != -EINVAL)
-			pval->intval = fg->bp.nom_cap_uah * 1000;
-		else
-			pval->intval = chip->cl.nom_cap_uah;
+		pval->intval = chip->cl.nom_cap_uah;
+#ifdef CONFIG_MACH_LONGCHEER
+		if (fg->battery_full_design > 0)
+			pval->intval = fg->battery_full_design * 1000;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		pval->intval = fg->batt_id_ohms;
@@ -4038,7 +4049,11 @@ static int fg_psy_set_property(struct power_supply *psy,
 			pr_warn("Capacity learning active!\n");
 			return 0;
 		}
-		if (pval->intval <= 0 || pval->intval > chip->cl.nom_cap_uah) {
+		if (pval->intval < 1000 ||
+		    pval->intval > MAX_LEARNED_CAP_UAH ||
+		    (chip->dt.cl_max_cap_limit &&
+		     pval->intval > div64_s64(chip->cl.nom_cap_uah *
+				(1000 + chip->dt.cl_max_cap_limit), 1000))) {
 			pr_err("charge_full is out of bounds\n");
 			return -EINVAL;
 		}
@@ -4097,9 +4112,6 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 	case POWER_SUPPLY_PROP_CC_STEP:
 	case POWER_SUPPLY_PROP_CC_STEP_SEL:
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-	case POWER_SUPPLY_PROP_FG_RESET_CLOCK:
-#endif
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 	case POWER_SUPPLY_PROP_COLD_TEMP:
 	case POWER_SUPPLY_PROP_COOL_TEMP:
@@ -4553,7 +4565,6 @@ static int fg_hw_init(struct fg_dev *fg)
 	return 0;
 }
 
-#ifndef CONFIG_MACH_XIAOMI_WAYNE
 static int fg_adjust_timebase(struct fg_dev *fg)
 {
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
@@ -4588,7 +4599,6 @@ static int fg_adjust_timebase(struct fg_dev *fg)
 
 	return 0;
 }
-#endif
 
 /* INTERRUPT HANDLERS STAY HERE */
 
@@ -4658,7 +4668,7 @@ static irqreturn_t fg_batt_missing_irq_handler(int irq, void *data)
 	}
 
 	clear_battery_profile(fg);
-	queue_delayed_work(system_power_efficient_wq, &fg->profile_load_work, 0);
+	schedule_delayed_work(&fg->profile_load_work, 0);
 
 	if (fg->fg_psy)
 		power_supply_changed(fg->fg_psy);
@@ -4701,11 +4711,10 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 	fg->health = prop.intval;
 
 	if (fg->last_batt_temp != batt_temp) {
-#ifndef CONFIG_MACH_XIAOMI_WAYNE
 		rc = fg_adjust_timebase(fg);
 		if (rc < 0)
 			pr_err("Error in adjusting timebase, rc=%d\n", rc);
-#endif
+
 		rc = fg_adjust_recharge_voltage(fg);
 		if (rc < 0)
 			pr_err("Error in adjusting recharge_voltage, rc=%d\n",
@@ -4757,6 +4766,7 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 	struct fg_dev *fg = data;
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
 	int rc;
+
 #ifdef CONFIG_MACH_LONGCHEER
 	struct thermal_zone_device *quiet_them;
 	int msoc, volt_uv, batt_temp, ibatt_now,temp_qt ;
@@ -4784,11 +4794,11 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 	rc = fg_esr_validate(fg);
 	if (rc < 0)
 		pr_err("Error in validating ESR, rc=%d\n", rc);
-#ifndef CONFIG_MACH_XIAOMI_WAYNE
+
 	rc = fg_adjust_timebase(fg);
 	if (rc < 0)
 		pr_err("Error in adjusting timebase, rc=%d\n", rc);
-#endif
+
 	if (batt_psy_initialized(fg))
 		power_supply_changed(fg->batt_psy);
 
@@ -5481,7 +5491,7 @@ static int fg_parse_dt(struct fg_gen3_chip *chip)
 	rc = of_property_read_u32(node, "qcom,fg-esr-meas-curr-ma", &temp);
 	if (!rc) {
 		/* ESR measurement current range is 60-240 mA */
-		if (temp >= 60 && temp <= 240)
+		if (temp >= 60 || temp <= 240)
 			chip->dt.esr_meas_curr_ma = temp;
 	}
 
@@ -5758,7 +5768,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	}
 
 	device_init_wakeup(fg->dev, true);
-	queue_delayed_work(system_power_efficient_wq, &fg->profile_load_work, 0);
+	schedule_delayed_work(&fg->profile_load_work, 0);
 
 	pr_debug("FG GEN3 driver probed successfully\n");
 	return 0;
@@ -5797,9 +5807,9 @@ static int fg_gen3_resume(struct device *dev)
 	if (rc < 0)
 		pr_err("Error in configuring ESR timer, rc=%d\n", rc);
 
-	queue_delayed_work(system_power_efficient_wq, &chip->ttf_work, 0);
+	schedule_delayed_work(&chip->ttf_work, 0);
 	if (fg_sram_dump)
-		queue_delayed_work(system_power_efficient_wq, &fg->sram_dump_work,
+		schedule_delayed_work(&fg->sram_dump_work,
 				msecs_to_jiffies(fg_sram_dump_period_ms));
 
 	if (!work_pending(&fg->status_change_work)) {

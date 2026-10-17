@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __KGSL_DEVICE_H
 #define __KGSL_DEVICE_H
@@ -50,7 +50,10 @@ enum kgsl_event_results {
 	KGSL_EVENT_CANCELLED = 2,
 };
 
-#define KGSL_FLAG_SPARSE        BIT(1)
+#define KGSL_FLAG_WAKE_ON_TOUCH   BIT(0)
+#define KGSL_FLAG_SPARSE          BIT(1)
+#define KGSL_FLAG_USE_SHMEM       BIT(2)
+#define KGSL_FLAG_PROCESS_RECLAIM BIT(3)
 
 /*
  * "list" of event types for ftrace symbolic magic
@@ -308,7 +311,7 @@ struct kgsl_device {
 	struct kgsl_pwrscale pwrscale;
 
 	int reset_counter; /* Track how many GPU core resets have occurred */
-	struct workqueue_struct *events_wq;
+	struct kthread_worker *events_worker;
 
 	struct device *busmondev; /* pseudo dev for GPU BW voting governor */
 

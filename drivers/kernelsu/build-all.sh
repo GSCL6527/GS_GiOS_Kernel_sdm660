@@ -1,0 +1,1 @@
+../../KernelSU/kernel/build-all.sh

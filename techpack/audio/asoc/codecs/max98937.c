@@ -21,8 +21,10 @@
 #include <linux/of_gpio.h>
 #include <sound/tlv.h>
 #include <linux/debugfs.h>
-#include "max98937.h"
+#include <linux/fs.h>
+#include <asm/segment.h>
 #include <linux/miscdevice.h>
+#include "max98937.h"
 
 /* #define snd_soc_kcontrol_component snd_kcontrol_chip */
 /* #define snd_soc_dapm_to_component(w->dapm)  w->component */
@@ -810,7 +812,6 @@ static int max989xx_calib_save (uint32_t calib_value, int ch)
 }
 #endif
 
-#ifdef CONFIG_DEBUG_FS
 static inline bool rdc_check_valid(uint32_t rdc, int ch)
 {
 	int rdc_min, rdc_max;
@@ -832,12 +833,6 @@ static inline bool rdc_check_valid(uint32_t rdc, int ch)
 	pr_info("%s: rdc=%d invalid, [%d, %d] \n", __func__, rdc, rdc_min, rdc_max);
 	return false;
 }
-#else
-static inline bool rdc_check_valid(uint32_t rdc, int ch)
-{
-	return false;
-}
-#endif
 
 #ifdef CONFIG_DEBUG_FS
 static ssize_t max989xx_dbgfs_calibrate_read(struct file *file,
@@ -1159,7 +1154,7 @@ void max98927_wrap_update_bits(struct max989xx_priv *max98927,
 static int max98927_reg_get_w(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component= snd_soc_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct max989xx_priv *max98927 = snd_soc_component_get_drvdata(component);
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *)kcontrol->private_value;
@@ -2703,7 +2698,7 @@ static int max98927_probe(struct snd_soc_component *component)
 }
 
 static const struct snd_soc_component_driver soc_component_dev_max98927 = {
-	        .probe		  = max98927_probe,
+	    .probe            = max98927_probe,
 		.dapm_routes	  = max98927_audio_map,
 		.num_dapm_routes  = ARRAY_SIZE(max98927_audio_map),
 		.dapm_widgets     = max98927_dapm_widgets,

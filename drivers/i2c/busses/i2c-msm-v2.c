@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2019, 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019, 2020, The Linux Foundation. All rights reserved.
  */
 
 /*
@@ -87,11 +87,6 @@ static void i2c_msm_dbg_dump_diag(struct i2c_msm_ctrl *ctrl,
 
 		status = readl_relaxed(base + QUP_I2C_STATUS);
 		qup_op = readl_relaxed(base + QUP_OPERATIONAL);
-	}
-
-	if ((status & QUP_PACKET_NACKED) && (xfer->msgs->addr == 0x38 || xfer->msgs->addr == 0x1d)) {
-		dev_dbg(ctrl->dev, "%s: i2c slave suspended", __func__);
-		return;
 	}
 
 	if (xfer->err == I2C_MSM_ERR_TIMEOUT) {
@@ -2258,7 +2253,7 @@ static int i2c_msm_pm_xfer_start(struct i2c_msm_ctrl *ctrl)
 	 * and systme-pm are in transition concurrently)
 	 */
 	if (ctrl->pwr_state != I2C_MSM_PM_RT_ACTIVE) {
-		dev_dbg(ctrl->dev, "Runtime PM-callback was not invoked\n");
+		dev_info(ctrl->dev, "Runtime PM-callback was not invoked\n");
 		i2c_msm_pm_resume(ctrl->dev);
 	}
 
@@ -2583,9 +2578,8 @@ static int i2c_msm_rsrcs_irq_init(struct platform_device *pdev,
 		return irq;
 	}
 
-	ret = request_irq(irq, i2c_msm_qup_isr,
-			IRQF_TRIGGER_HIGH | IRQF_EARLY_RESUME | IRQF_NO_SUSPEND,
-			"i2c-msm-v2-irq", ctrl);
+	ret = request_irq(irq, i2c_msm_qup_isr, IRQF_TRIGGER_HIGH,
+						"i2c-msm-v2-irq", ctrl);
 	if (ret) {
 		dev_err(ctrl->dev, "error request_irq(irq_num:%d ) ret:%d\n",
 								irq, ret);
@@ -2684,9 +2678,11 @@ static int i2c_msm_rsrcs_clk_init(struct i2c_msm_ctrl *ctrl)
 	}
 
 	ctrl->rsrcs.core_clk = clk_get(ctrl->dev, "core_clk");
-	if (IS_ERR(ctrl->rsrcs.core_clk))
-		return dev_err_probe(ctrl->dev, PTR_ERR(ctrl->rsrcs.core_clk),
-				     "clk_get(core_clk)\n");
+	if (IS_ERR(ctrl->rsrcs.core_clk)) {
+		ret = PTR_ERR(ctrl->rsrcs.core_clk);
+		dev_err(ctrl->dev, "error on clk_get(core_clk):%d\n", ret);
+		return ret;
+	}
 
 	ret = clk_set_rate(ctrl->rsrcs.core_clk, ctrl->rsrcs.clk_freq_in);
 	if (ret) {
@@ -2697,8 +2693,8 @@ static int i2c_msm_rsrcs_clk_init(struct i2c_msm_ctrl *ctrl)
 
 	ctrl->rsrcs.iface_clk = clk_get(ctrl->dev, "iface_clk");
 	if (IS_ERR(ctrl->rsrcs.iface_clk)) {
-		ret = dev_err_probe(ctrl->dev, PTR_ERR(ctrl->rsrcs.iface_clk),
-		       "clk_get(iface_clk)\n");
+		ret = PTR_ERR(ctrl->rsrcs.iface_clk);
+		dev_err(ctrl->dev, "error on clk_get(iface_clk):%d\n", ret);
 		goto err_set_rate;
 	}
 
@@ -2984,7 +2980,7 @@ err_no_pinctrl:
 clk_err:
 	i2c_msm_rsrcs_mem_teardown(ctrl);
 mem_err:
-	dev_err_probe(ctrl->dev, ret, "error probe() failed with err\n");
+	dev_err(ctrl->dev, "error probe() failed with err:%d\n", ret);
 	return ret;
 }
 

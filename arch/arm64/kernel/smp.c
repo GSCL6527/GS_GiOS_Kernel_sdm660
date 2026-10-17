@@ -51,7 +51,7 @@
 #include <asm/daifflags.h>
 #include <asm/mmu_context.h>
 #include <asm/numa.h>
-#include <asm/pgtable.h>
+#include <linux/pgtable.h>
 #include <asm/pgalloc.h>
 #include <asm/processor.h>
 #include <asm/scs.h>
@@ -62,6 +62,8 @@
 #include <asm/virt.h>
 #include <asm/system_misc.h>
 #include <soc/qcom/minidump.h>
+
+#include <soc/qcom/lpm_levels.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
@@ -331,7 +333,7 @@ void __cpu_die(unsigned int cpu)
 		pr_crit("CPU%u: cpu didn't die\n", cpu);
 		return;
 	}
-	pr_debug("CPU%u: shutdown\n", cpu);
+	pr_info("CPU%u: shutdown\n", cpu);
 
 	/*
 	 * Now that the dying CPU is beyond the point of no return w.r.t.
@@ -602,6 +604,7 @@ static void __init acpi_parse_and_init_cpus(void)
 #define acpi_parse_and_init_cpus(...)	do { } while (0)
 #endif
 void (*__smp_cross_call)(const struct cpumask *, unsigned int);
+static void (*__smp_update_ipi_history_cb)(int cpu);
 /* Dummy vendor field */
 DEFINE_PER_CPU(bool, pending_ipi);
 EXPORT_SYMBOL_GPL(pending_ipi);
@@ -750,6 +753,12 @@ void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
 {
 	__smp_cross_call = fn;
 }
+
+void set_update_ipi_history_callback(void (*fn)(int))
+{
+	__smp_update_ipi_history_cb = fn;
+}
+EXPORT_SYMBOL_GPL(set_update_ipi_history_callback);
 
 static const char *ipi_types[NR_IPI] __tracepoint_string = {
 #define S(x,s)	[x] = s
@@ -954,6 +963,8 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 void smp_send_reschedule(int cpu)
 {
 	BUG_ON(cpu_is_offline(cpu));
+	if (__smp_update_ipi_history_cb)
+		__smp_update_ipi_history_cb(cpu);
 	smp_cross_call_common(cpumask_of(cpu), IPI_RESCHEDULE);
 }
 

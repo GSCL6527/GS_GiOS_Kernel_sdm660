@@ -37,6 +37,7 @@
 #include <linux/security.h>
 #include <linux/smp.h>
 #include <linux/profile.h>
+#include <linux/kfence.h>
 #include <linux/rcupdate.h>
 #include <linux/moduleparam.h>
 #include <linux/kallsyms.h>
@@ -91,6 +92,7 @@
 #include <linux/cache.h>
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
+#include <linux/mem_encrypt.h>
 
 #include <asm/io.h>
 #include <asm/setup.h>
@@ -571,8 +573,11 @@ static void __init mm_init(void)
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
 	page_ext_init_flatmem();
+	kfence_alloc_pool();
 	report_meminit();
 	mem_init();
+	/* page_owner must be initialized after buddy is ready */
+	page_ext_init_flatmem_late();
 	kmem_cache_init();
 	pgtable_init();
 	vmalloc_init();
@@ -584,9 +589,6 @@ static void __init mm_init(void)
 }
 
 #ifdef CONFIG_MACH_LONGCHEER
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-int fts_touch = 1;
-#endif
 int fpsensor = 1;
 bool is_poweroff_charge = false;
 #endif
@@ -594,6 +596,9 @@ asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
 	char *after_dashes;
+#ifdef CONFIG_MACH_LONGCHEER
+	char *p = NULL;
+#endif
 
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
@@ -627,22 +632,17 @@ asmlinkage __visible void __init start_kernel(void)
 	jump_label_init();
 
 #ifdef CONFIG_MACH_LONGCHEER
-#ifdef CONFIG_MACH_XIAOMI_TULIP
-	if (strstr(boot_command_line, "qcom,mdss_dsi_ft8719_e7t_boe_fhdplus_video"))
-		fts_touch = 1;
-	else
-		fts_touch = 2;
-#endif
-
-	if (strstr(boot_command_line, "androidboot.fpsensor=fpc"))
+	p = NULL;
+	p = strstr(boot_command_line, "androidboot.fpsensor=fpc");
+	if (p)
 		fpsensor = 1;
 	else
 		fpsensor = 2;
 
-	if (strstr(boot_command_line, "androidboot.mode=charger"))
+	p = NULL;
+	p = strstr(boot_command_line, "androidboot.mode=charger");
+	if (p)
 		is_poweroff_charge = true;
-	else
-		is_poweroff_charge = false;
 #endif
 
 	parse_early_param();
@@ -653,6 +653,9 @@ asmlinkage __visible void __init start_kernel(void)
 	if (!IS_ERR_OR_NULL(after_dashes))
 		parse_args("Setting init args", after_dashes, NULL, 0, -1, -1,
 			   NULL, set_init_arg);
+
+	/* Architectural and non-timekeeping rng init, before allocator init */
+	random_init_early(command_line);
 
 	/*
 	 * These use large bootmem allocations and must precede
@@ -718,14 +721,11 @@ asmlinkage __visible void __init start_kernel(void)
 	timekeeping_init();
 	time_init();
 
-	/*
-	 * For best initial stack canary entropy, prepare it after:
-	 * - setup_arch() for any UEFI RNG entropy and boot cmdline access
-	 * - timekeeping_init() for ktime entropy used in random_init()
-	 * - time_init() for making random_get_entropy() work on some platforms
-	 * - random_init() to initialize the RNG from from early entropy sources
-	 */
-	random_init(command_line);
+	/* This must be after timekeeping is initialized */
+	random_init();
+
+	/* These make use of the fully initialized rng */
+	kfence_init();
 	boot_init_stack_canary();
 
 	perf_event_init();

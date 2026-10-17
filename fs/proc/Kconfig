@@ -64,7 +64,7 @@ config PROC_SYSCTL
 	depends on PROC_FS
 	select SYSCTL
 	default y
-	---help---
+	help
 	  The sysctl interface provides a means of dynamically changing
 	  certain kernel parameters and variables on the fly without requiring
 	  a recompile of the kernel or reboot of the system.  The primary
@@ -103,3 +103,14 @@ config PROC_UID
 	depends on PROC_FS && RT_MUTEXES
 	help
 	Provides aggregated per-uid information under /proc/uid.
+
+config PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT
+	bool "Append androidboot.force_normal_boot=1 to cmdline if skip_initramfs is present"
+	default n
+	help
+	  If `skip_initramfs` is present in the kernel cmdline, then append
+	  `androidboot.force_normal_boot=1` to the cmdline string that we present
+	  in /proc/cmdline.
+
+	  This is a workaround to allow recovery-as-boot A/B devices that
+	  launched with Android 9 to use two-stage init.

@@ -22,6 +22,7 @@
 
 #ifdef CONFIG_TAS2557_REGMAP
 
+#define DEBUG
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -366,8 +367,7 @@ void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, bool enable, bool startup_
 				enable_irq(pTAS2557->mnIRQ);
 				if (startup_chk) {
 					/* check after 10 ms */
-					queue_delayed_work(system_power_efficient_wq,
-							   &pTAS2557->irq_work, msecs_to_jiffies(10));
+					schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(10));
 				}
 				pTAS2557->mbIRQEnable = true;
 			}
@@ -420,7 +420,7 @@ static void irq_work_routine(struct work_struct *work)
 	}
 
 	if (!pTAS2557->mbPowerUp) {
-		dev_dbg(pTAS2557->dev, "%s, device not powered\n", __func__);
+		dev_info(pTAS2557->dev, "%s, device not powered\n", __func__);
 		goto end;
 	}
 
@@ -549,7 +549,7 @@ static irqreturn_t tas2557_irq_handler(int irq, void *dev_id)
 
 	tas2557_enableIRQ(pTAS2557, false, false);
 	/* get IRQ status after 100 ms */
-	queue_delayed_work(system_power_efficient_wq, &pTAS2557->irq_work, msecs_to_jiffies(100));
+	schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(100));
 	return IRQ_HANDLED;
 }
 
@@ -561,8 +561,7 @@ static enum hrtimer_restart temperature_timer_func(struct hrtimer *timer)
 		schedule_work(&pTAS2557->mtimerwork);
 		if (gpio_is_valid(pTAS2557->mnGpioINT)) {
 			tas2557_enableIRQ(pTAS2557, false, false);
-			queue_delayed_work(system_power_efficient_wq,
-					   &pTAS2557->irq_work, msecs_to_jiffies(1));
+			schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(1));
 		}
 	}
 	return HRTIMER_NORESTART;

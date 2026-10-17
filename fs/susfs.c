@@ -1473,6 +1473,16 @@ void susfs_start_sdcard_monitor_fn(void) {
 	}
 }
 
+/* Match current KernelSU's deferred path refresh after a setuid transition. */
+static void susfs_run_extra_works(struct work_struct *work)
+{
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	susfs_run_sus_path_loop();
+#endif
+}
+
+DECLARE_WORK(susfs_extra_works, susfs_run_extra_works);
+
 /* susfs_init */
 void susfs_init(void) {
 	static_branch_enable(&ksu_init_rc_hook_key_false);

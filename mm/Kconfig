@@ -604,6 +604,15 @@ config CMA_DEBUGFS
 	help
 	  Turns on the DebugFS interface for CMA.
 
+config  CMA_ALLOW_WRITE_DEBUGFS
+	depends on CMA_DEBUGFS
+	bool "Allow CMA debugfs write"
+	help
+	  Say 'y' here to allow the CMA debugfs write.
+	  CMA debugfs write could be risky as it allows
+	  cma allocation, so it is not recommended to
+	  enable this option on any production device.
+
 config CMA_AREAS
 	int "Maximum count of the CMA areas"
 	depends on CMA
@@ -696,24 +705,14 @@ config ZSMALLOC_STAT
 	  information to userspace via debugfs.
 	  If unsure, say N.
 
-config ZSMALLOC_CHAIN_SIZE
-	int "Maximum number of physical pages per-zspage"
-	default 8
-	range 4 16
-	depends on ZSMALLOC
+config VMAP_LAZY_PURGING_FACTOR
+	int "multiplier to the size of purged vmap areas"
+	default "8" if ARM
+	default "32"
 	help
-	  This option sets the upper limit on the number of physical pages
-	  that a zmalloc page (zspage) can consist of. The optimal zspage
-	  chain size is calculated for each size class during the
-	  initialization of the pool.
-
-	  Changing this option can alter the characteristics of size classes,
-	  such as the number of pages per zspage and the number of objects
-	  per zspage. This can also result in different configurations of
-	  the pool, as zsmalloc merges size classes with similar
-	  characteristics.
-
-	  For more information, see zsmalloc documentation.
+	  It is used as a multiplier to the max VA pages purged in a
+	  single attempt. For 32-bit in order to reduce fragmentation
+	  of vmalloc space, we decrease the default value to "8".
 
 config MM_EVENT_STAT
 	bool "Track per-process MM event"
@@ -878,6 +877,15 @@ config PERCPU_STATS
 	  information includes global and per chunk statistics, which can
 	  be used to help understand percpu memory usage.
 
+config HAVE_USERSPACE_LOW_MEMORY_KILLER
+	bool "Have userspace low memory killer"
+	default n
+	help
+	  The page allocator cannot directly call into a
+	  userspace low memory killer as it can call into the OOM killer.
+	  Therefore, add a timeout mechanism to give the userspace
+	  low memory killer a chance to run.
+
 config GUP_BENCHMARK
 	bool "Enable infrastructure for get_user_pages_fast() benchmarking"
 	default n
@@ -891,6 +899,62 @@ config ARCH_HAS_PTE_SPECIAL
 	bool
 
 endmenu
+
+config PROCESS_RECLAIM
+	bool "Enable process reclaim"
+	depends on PROC_FS
+	default y
+	help
+	 It allows to reclaim pages of the process by /proc/pid/reclaim.
+
+	 (echo file > /proc/PID/reclaim) reclaims file-backed pages only.
+	 (echo anon > /proc/PID/reclaim) reclaims anonymous pages only.
+	 (echo all > /proc/PID/reclaim) reclaims all pages.
+
+	 (echo addr size-byte > /proc/PID/reclaim) reclaims pages in
+	 (addr, addr + size-bytes) of the process.
+
+	 Any other value is ignored.
+
+config FORCE_ALLOC_FROM_DMA_ZONE
+	bool "Force certain memory allocators to always return ZONE_DMA32 memory"
+	depends on ZONE_DMA32
+	help
+	  Ensure certain memory allocators always return memory from ZONE_DMA32.
+	  This option helps ensure that clients who require ZONE_DMA32 memory are
+	  always using ZONE_DMA32 memory.
+
+	  If unsure, say "n".
+
+config MEMFD_ASHMEM_SHIM
+	bool "Memfd ashmem ioctl compatibility support"
+	depends on MEMFD_CREATE
+	help
+	  This provides compatibility support for ashmem ioctl commands against
+	  memfd file descriptors. This is useful for compatibility on Android
+	  for older applications that may use ashmem's ioctl commands on the
+	  now memfds passed to them.
+
+	  Unless you are running Android, say N.
+
+config ZSMALLOC_CHAIN_SIZE
+	int "Maximum number of physical pages per-zspage"
+	default 8
+	range 4 16
+	depends on ZSMALLOC
+	help
+	  This option sets the upper limit on the number of physical pages
+	  that a zmalloc page (zspage) can consist of. The optimal zspage
+	  chain size is calculated for each size class during the
+	  initialization of the pool.
+
+	  Changing this option can alter the characteristics of size classes,
+	  such as the number of pages per zspage and the number of objects
+	  per zspage. This can also result in different configurations of
+	  the pool, as zsmalloc merges size classes with similar
+	  characteristics.
+
+	  For more information, see zsmalloc documentation.
 
 config VM_MAX_READAHEAD
 	int "default max readahead window size"

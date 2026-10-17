@@ -617,7 +617,21 @@ static u32 get_frame_size_nv12(int plane,
 
 static u32 get_frame_size_nv12_ubwc(int plane, u32 height, u32 width)
 {
-	return VENUS_BUFFER_SIZE(COLOR_FMT_NV12_UBWC, width, height);
+	u32 size = VENUS_BUFFER_SIZE(COLOR_FMT_NV12_UBWC, width, height);
+
+	/*
+	 * Venus 3.x and its native-buffer allocator use the legacy interlaced
+	 * layout. The newer UAPI adds 64 luma scanlines to that layout, which
+	 * exceeds existing gralloc allocations even for progressive HEVC.
+	 * Keep this compatibility adjustment local to the legacy decoder;
+	 * queue_setup still enforces the firmware's actual minimum size.
+	 */
+	if (width && height && width <= INTERLACE_WIDTH_MAX &&
+	    height <= INTERLACE_HEIGHT_MAX &&
+	    width * height / 256 <= INTERLACE_MB_PER_FRAME_MAX)
+		size -= 64 * VENUS_Y_STRIDE(COLOR_FMT_NV12_UBWC, width);
+
+	return size;
 }
 
 static u32 get_frame_size_compressed(int plane,
@@ -1575,7 +1589,8 @@ static int msm_vdec_queue_setup(struct vb2_queue *q,
 				inst->buff_req.buffer[1].buffer_count_actual,
 				inst->buff_req.buffer[1].buffer_size,
 				inst->buff_req.buffer[1].buffer_alignment);
-		sizes[0] = inst->bufq[CAPTURE_PORT].plane_sizes[0];
+		sizes[0] = max(inst->bufq[CAPTURE_PORT].plane_sizes[0],
+			       bufreq->buffer_size);
 
 
 		/* Set actual buffer count to firmware for DPB buffers.

@@ -69,7 +69,7 @@ static ssize_t bin_attr_nvmem_cell_read(struct file *filp, struct kobject *kobj,
 				    char *buf, loff_t pos, size_t count)
 {
 	struct nvmem_cell *cell;
-	size_t len = 0;
+	size_t len;
 	u8 *data;
 
 	cell = attr->private;
@@ -1036,6 +1036,8 @@ int nvmem_cell_write(struct nvmem_cell *cell, void *buf, size_t len)
 		return -EINVAL;
 
 	if (cell->bit_offset || cell->nbits) {
+		if (len != BITS_TO_BYTES(cell->nbits) && len != cell->bytes)
+			return -EINVAL;
 		buf = nvmem_cell_prepare_write_buffer(cell, buf, len);
 		if (IS_ERR(buf))
 			return PTR_ERR(buf);

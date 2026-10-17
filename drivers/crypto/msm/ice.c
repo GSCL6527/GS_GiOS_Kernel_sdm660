@@ -135,8 +135,9 @@ static int qcom_ice_set_bus_vote(struct ice_device *ice_dev, int vote)
 				ice_dev->bus_vote.client_handle, vote);
 		if (err) {
 			dev_err(ice_dev->pdev,
-				"%s:failed:client_handle=0x%x, vote=%d, err=%d\n",
-				__func__, ice_dev->bus_vote.client_handle,
+				"%s:failed:client_handle=0x%x, vote=%d,
+				err=%d\n", __func__,
+				ice_dev->bus_vote.client_handle,
 				vote, err);
 			goto out;
 		}
@@ -516,8 +517,6 @@ static int qcom_ice_parse_clock_info(struct platform_device *pdev,
 		list_add_tail(&clki->list, &ice_dev->clk_list_head);
 	}
 out:
-	if (clkfreq)
-		devm_kfree(dev, (void *)clkfreq);
 	return ret;
 }
 
@@ -1566,7 +1565,6 @@ static struct platform_driver qcom_ice_driver = {
 	.driver         = {
 		.name   = "qcom_ice",
 		.of_match_table = qcom_ice_match,
-		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 module_platform_driver(qcom_ice_driver);

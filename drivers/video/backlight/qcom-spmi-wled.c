@@ -58,6 +58,13 @@
 #define WLED_CTRL_ILIM			0x4e
 #define  WLED_CTRL_ILIM_MASK		GENMASK(2, 0)
 
+#define WLED_CTRL_LCD_AUTO_PFM				0x5c
+#define  WLED_CTRL_LCD_AUTO_PFM_DFLT_THRESH		1
+#define  WLED_CTRL_LCD_AUTO_PFM_THRESH_MAX		0xF
+#define  WLED_CTRL_LCD_AUTO_PFM_EN_SHIFT		7
+#define  WLED_CTRL_LCD_AUTO_PFM_EN_BIT			BIT(7)
+#define  WLED_CTRL_LCD_AUTO_PFM_THRESH_MASK		GENMASK(3, 0)
+
 #define WLED_CTRL_SHORT_PROTECT		0x5e
 #define  WLED_CTRL_SHORT_EN_MASK	BIT(7)
 
@@ -206,6 +213,7 @@ struct wled_config {
 	int cabc_sel;
 	int sync_dly;
 	bool en_cabc;
+	bool disp_type_amoled;
 	bool ext_pfet_sc_pro_en;
 	bool auto_calib_enabled;
 };
@@ -1037,12 +1045,15 @@ static irqreturn_t wled_ovp_irq_handler(int irq, void *_wled)
 	rc = wled_get_ovp_fault_status(wled, &fault_set);
 	if (rc < 0) {
 		pr_err("Error in getting OVP fault_sts, rc=%d\n", rc);
-		return rc;
+		goto END;
 	}
 
 	if (fault_set)
 		handle_ovp_fault(wled);
 
+END:
+	disable_irq_nosync(wled->ovp_irq);
+	wled->ovp_irq_disabled = true;
 	return IRQ_HANDLED;
 }
 
@@ -1247,6 +1258,22 @@ static int wled4_setup(struct wled *wled)
 	if (rc < 0)
 		return rc;
 
+	/* Configure auto PFM mode for LCD mode only */
+	if (is_wled4(wled) && !wled->cfg.disp_type_amoled) {
+		u8 reg = WLED_CTRL_LCD_AUTO_PFM_DFLT_THRESH;
+
+		if (wled->pmic_rev_id->pmic_subtype != PMI8998_SUBTYPE ||
+				wled->pmic_rev_id->rev4 != PMI8998_V2P0_REV4)
+			reg |= 1 << WLED_CTRL_LCD_AUTO_PFM_EN_SHIFT;
+
+		rc = regmap_update_bits(wled->regmap,
+				wled->ctrl_addr + WLED_CTRL_LCD_AUTO_PFM,
+				WLED_CTRL_LCD_AUTO_PFM_EN_BIT |
+				WLED_CTRL_LCD_AUTO_PFM_THRESH_MASK, reg);
+		if (rc < 0)
+			return rc;
+	}
+
 	/* Per sink/string configuration */
 	for (i = 0; (string_cfg >> i) != 0; i++) {
 		if (string_cfg & BIT(i)) {
@@ -1364,6 +1391,7 @@ static const struct wled_config wled4_config_defaults = {
 	.mod_sel = -EINVAL,
 	.cabc_sel = -EINVAL,
 	.en_cabc = 0,
+	.disp_type_amoled = 0,
 	.ext_pfet_sc_pro_en = 0,
 	.auto_calib_enabled = 0,
 };
@@ -1377,6 +1405,7 @@ static const struct wled_config wled5_config_defaults = {
 	.mod_sel = 0,
 	.cabc_sel = 0,
 	.en_cabc = 0,
+	.disp_type_amoled = 0,
 	.ext_pfet_sc_pro_en = 0,
 	.auto_calib_enabled = 0,
 };
@@ -1407,7 +1436,7 @@ static const struct wled_var_cfg wled5_boost_i_limit_cfg = {
 };
 
 static const u32 wled_fs_current_values[] = {
-	0, 2500, 5000, 7500, 10000, 12500, 15000, 17500, 18000, 20000,
+	0, 2500, 5000, 7500, 10000, 12500, 15000, 17500, 20000,
 	22500, 25000, 27500, 30000,
 };
 
@@ -2201,6 +2230,7 @@ static int wled_configure(struct wled *wled, struct device *dev)
 		bool *val_ptr;
 	} bool_opts[] = {
 		{ "qcom,en-cabc", &cfg->en_cabc, },
+		{ "qcom,disp-type-amoled", &cfg->disp_type_amoled, },
 		{ "qcom,ext-pfet-sc-pro", &cfg->ext_pfet_sc_pro_en, },
 		{ "qcom,auto-calibration", &cfg->auto_calib_enabled, },
 	};

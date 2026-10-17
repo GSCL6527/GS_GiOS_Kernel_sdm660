@@ -316,9 +316,7 @@ struct osm_entry {
 };
 
 static void __iomem *virt_base;
-#ifdef CONFIG_DEBUG_FS
 static struct dentry *osm_debugfs_base;
-#endif
 static struct regulator *vdd_pwrcl;
 static struct regulator *vdd_perfcl;
 
@@ -339,9 +337,7 @@ static const struct regmap_config osm_qcom_regmap_config = {
 struct clk_osm {
 	struct clk_hw hw;
 	struct osm_entry osm_table[OSM_TABLE_SIZE];
-#ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs;
-#endif
 	struct regulator *vdd_reg;
 	struct platform_device *vdd_dev;
 	void *vbases[NUM_BASES];
@@ -781,9 +777,7 @@ const struct clk_ops clk_ops_cpu_osm_660 = {
 	.determine_rate = clk_osm_determine_rate,
 	.list_rate = clk_osm_list_rate,
 	.recalc_rate = clk_osm_recalc_rate,
-#ifdef CONFIG_QCOM_CLK_DEBUG
 	.debug_init = clk_debug_measure_add,
-#endif
 };
 
 static const struct parent_map gcc_parent_map_1[] = {
@@ -1542,7 +1536,7 @@ static int clk_osm_setup_hw_table(struct clk_osm *c)
 	struct osm_entry *entry = c->osm_table;
 	int i;
 	u32 freq_val = 0, volt_val = 0, override_val = 0, spare_val = 0;
-	u32 table_entry_offset, last_spare = 0, last_virtual_corner = 0;
+	u32 table_entry_offset, last_spare, last_virtual_corner = 0;
 
 	for (i = 0; i < OSM_TABLE_SIZE; i++) {
 		if (i < c->num_entries) {
@@ -2911,7 +2905,6 @@ DEFINE_DEBUGFS_ATTRIBUTE(debugfs_acd_debug_reg_addr_fops,
 			debugfs_set_debug_reg_addr,
 			"%llu\n");
 
-#ifdef CONFIG_DEBUG_FS
 static void populate_debugfs_dir(struct clk_osm *c)
 {
 	struct dentry *temp;
@@ -3025,7 +3018,6 @@ exit:
 	if (IS_ERR_OR_NULL(temp))
 		debugfs_remove_recursive(c->debugfs);
 }
-#endif
 
 static int clk_osm_panic_callback(struct notifier_block *nfb,
 				  unsigned long event,
@@ -3415,10 +3407,8 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
 	}
 
 	populate_opp_table(pdev);
-#ifdef CONFIG_DEBUG_FS
 	populate_debugfs_dir(&pwrcl_clk);
 	populate_debugfs_dir(&perfcl_clk);
-#endif
 
 	of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (C) 2019 XiaoMi, Inc. */
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -14,6 +15,7 @@
 #include <linux/clk.h>
 #include <linux/uaccess.h>
 #include <linux/msm-bus.h>
+#include <linux/pm_qos.h>
 #include <linux/dma-buf.h>
 
 #include "mdss.h"
@@ -22,11 +24,17 @@
 #include "mdss_debug.h"
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
+#include "mdss_livedisplay.h"
 
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
+
+#define DSI_DISABLE_PC_LATENCY 100
+#define DSI_ENABLE_PC_LATENCY PM_QOS_DEFAULT_VALUE
+
+static struct pm_qos_request mdss_dsi_pm_qos_request;
 
 void mdss_dump_dsi_debug_bus(u32 bus_dump_flag,
 	u32 **dump_mem)
@@ -117,6 +125,55 @@ void mdss_dump_dsi_debug_bus(u32 bus_dump_flag,
 			  MDSS_DSI_CORE_CLK, MDSS_DSI_CLK_OFF);
 
 	pr_info("========End DSI Debug Bus=========\n");
+}
+
+static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	struct irq_info *irq_info;
+
+	if (!ctrl_pdata || !ctrl_pdata->shared_data)
+		return;
+
+	irq_info = ctrl_pdata->dsi_hw->irq_info;
+
+	if (!irq_info)
+		return;
+
+	mutex_lock(&ctrl_pdata->shared_data->pm_qos_lock);
+	if (!ctrl_pdata->shared_data->pm_qos_req_cnt) {
+		pr_debug("%s: add request irq\n", __func__);
+
+		mdss_dsi_pm_qos_request.type = PM_QOS_REQ_AFFINE_IRQ;
+		mdss_dsi_pm_qos_request.irq = irq_info->irq;
+		pm_qos_add_request(&mdss_dsi_pm_qos_request,
+			PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+	}
+	ctrl_pdata->shared_data->pm_qos_req_cnt++;
+	mutex_unlock(&ctrl_pdata->shared_data->pm_qos_lock);
+}
+
+static void mdss_dsi_pm_qos_remove_request(struct dsi_shared_data *sdata)
+{
+	if (!sdata)
+		return;
+
+	mutex_lock(&sdata->pm_qos_lock);
+	if (sdata->pm_qos_req_cnt) {
+		sdata->pm_qos_req_cnt--;
+		if (!sdata->pm_qos_req_cnt) {
+			pr_debug("%s: remove request\n", __func__);
+			pm_qos_remove_request(&mdss_dsi_pm_qos_request);
+		}
+	} else {
+		pr_warn("%s: unbalanced pm_qos ref count\n", __func__);
+	}
+	mutex_unlock(&sdata->pm_qos_lock);
+}
+
+static void mdss_dsi_pm_qos_update_request(int val)
+{
+	pr_debug("%s: update request %d\n", __func__, val);
+	pm_qos_update_request(&mdss_dsi_pm_qos_request, val);
 }
 
 static int mdss_dsi_pinctrl_set_state(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
@@ -377,11 +434,18 @@ static int mdss_dsi_panel_power_lp(struct mdss_panel_data *pdata, int enable)
 	return 0;
 }
 
+#ifdef CONFIG_MACH_LONGCHEER
+extern bool ESD_TE_status;
+#endif
+
 static int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	int power_state)
 {
 	int ret = 0;
 	struct mdss_panel_info *pinfo;
+#ifdef CONFIG_MACH_LONGCHEER
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+#endif
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -416,7 +480,49 @@ static int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 		if (mdss_dsi_is_panel_on_lp(pdata))
 			ret = mdss_dsi_panel_power_lp(pdata, false);
 		else
+#ifdef CONFIG_MACH_LONGCHEER
+		{
+			if (ESD_TE_status) {
+				ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+							panel_data);
+
+				ret = mdss_dsi_panel_reset(pdata, 0);
+				if (ret) {
+					pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+					ret = 0;
+				}
+				if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+					pr_debug("reset disable:pinctrl not enable \n");
+
+				ret = msm_dss_enable_vreg(ctrl_pdata->panel_power_data.vreg_config,
+						ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s:failed to disable vreg for %s\n", __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+				msleep(10);
+				mdss_dsi_panel_reset(pdata, 1);
+				msleep(10);
+				mdss_dsi_panel_reset(pdata, 0);
+				msleep(1);
+				mdss_dsi_panel_reset(pdata, 1);
+				msleep(10);
+				mdss_dsi_panel_reset(pdata, 0);
+				msleep(300);
+				mdss_dsi_panel_reset(pdata, 1);
+				msleep(20);
+				mdss_dsi_panel_reset(pdata, 0);
+				msleep(20);
+				mdss_dsi_panel_reset(pdata, 1);
+				msleep(20);
+				mdss_dsi_panel_reset(pdata, 0);
+				printk("nova panel reset\n");
+
+				ESD_TE_status = false;
+			}
+#endif
 			ret = mdss_dsi_panel_power_on(pdata);
+#ifdef CONFIG_MACH_LONGCHEER
+		}
+#endif
 		break;
 	case MDSS_PANEL_POWER_LP1:
 	case MDSS_PANEL_POWER_LP2:
@@ -950,7 +1056,6 @@ struct dentry *dsi_debugfs_create_dcs_cmd(const char *name, umode_t mode,
 #define DEBUGFS_CREATE_DCS_CMD(name, node, cmd, ctrl_cmd) \
 	dsi_debugfs_create_dcs_cmd(name, 0644, node, cmd, ctrl_cmd)
 
-#ifdef CONFIG_DEBUG_FS
 static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 			struct dentry *parent)
 {
@@ -1045,7 +1150,6 @@ static void mdss_dsi_debugfs_cleanup(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	} while (pdata);
 	pr_debug("%s: Cleaned up mdss_dsi_debugfs_info\n", __func__);
 }
-#endif
 
 static int _mdss_dsi_refresh_cmd(struct buf_data *new_cmds,
 	struct dsi_panel_cmds *original_pcmds)
@@ -1582,6 +1686,8 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 			__func__, ctrl_pdata, ctrl_pdata->ndx,
 		pdata->panel_info.panel_power_state, ctrl_pdata->ctrl_state);
 
+	mdss_dsi_pm_qos_update_request(DSI_DISABLE_PC_LATENCY);
+
 	if (mdss_dsi_is_ctrl_clk_master(ctrl_pdata))
 		sctrl = mdss_dsi_get_ctrl_clk_slave();
 
@@ -1628,6 +1734,8 @@ error:
 	if (sctrl)
 		mdss_dsi_clk_ctrl(sctrl, sctrl->dsi_clk_handle,
 				  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_OFF);
+
+	mdss_dsi_pm_qos_update_request(DSI_ENABLE_PC_LATENCY);
 
 	pr_debug("%s-:\n", __func__);
 
@@ -2986,9 +3094,8 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		rc = mdss_dsi_panel_timing_switch(ctrl_pdata, arg);
 		break;
 	case MDSS_EVENT_FB_REGISTERED:
-#ifdef CONFIG_DEBUG_FS
 		mdss_dsi_debugfs_init(ctrl_pdata);
-#endif
+
 		fbi = (struct fb_info *)arg;
 		if (!fbi || !fbi->dev)
 			break;
@@ -3023,6 +3130,9 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				pr_err("unable to change bitclk error-%d\n",
 					rc);
 		}
+		break;
+	case MDSS_EVENT_UPDATE_LIVEDISPLAY:
+		rc = mdss_livedisplay_update(ctrl_pdata, (int)(unsigned long) arg);
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
@@ -3636,6 +3746,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	pr_info("%s: Dsi Ctrl->%d initialized, DSI rev:0x%x, PHY rev:0x%x\n",
 		__func__, index, ctrl_pdata->shared_data->hw_rev,
 		ctrl_pdata->shared_data->phy_rev);
+	mdss_dsi_pm_qos_add_request(ctrl_pdata);
 
 	if (index == 0)
 		ctrl_pdata->shared_data->dsi0_active = true;
@@ -3833,6 +3944,7 @@ static int mdss_dsi_res_init(struct platform_device *pdev)
 		}
 
 		mutex_init(&sdata->phy_reg_lock);
+		mutex_init(&sdata->pm_qos_lock);
 
 		for (i = 0; i < DSI_CTRL_MAX; i++) {
 			mdss_dsi_res->ctrl_pdata[i] = devm_kzalloc(&pdev->dev,
@@ -4102,6 +4214,8 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	mdss_dsi_pm_qos_remove_request(ctrl_pdata->shared_data);
+
 	if (msm_dss_config_vreg(&pdev->dev,
 			ctrl_pdata->panel_power_data.vreg_config,
 			ctrl_pdata->panel_power_data.num_vreg, 1) < 0)
@@ -4113,9 +4227,7 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 	msm_dss_iounmap(&ctrl_pdata->mmss_misc_io);
 	msm_dss_iounmap(&ctrl_pdata->phy_io);
 	msm_dss_iounmap(&ctrl_pdata->ctrl_io);
-#ifdef CONFIG_DEBUG_FS
 	mdss_dsi_debugfs_cleanup(ctrl_pdata);
-#endif
 
 	if (ctrl_pdata->workq)
 		destroy_workqueue(ctrl_pdata->workq);
@@ -4461,6 +4573,14 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
+
+#ifdef CONFIG_MACH_MI
+	ctrl_pdata->tp_rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-tp-reset-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->tp_rst_gpio))
+		pr_err("%s:%d, tp reset gpio not specified\n",
+						__func__, __LINE__);
+#endif
 
 	ctrl_pdata->lcd_mode_sel_gpio = of_get_named_gpio(
 			ctrl_pdev->dev.of_node, "qcom,panel-mode-gpio", 0);

@@ -557,7 +557,7 @@ static int msm_mpm_init(struct device_node *node)
 	dev->ipc_irq = irq;
 
 	ret = request_irq(dev->ipc_irq, msm_mpm_irq,
-		IRQF_TRIGGER_RISING, "mpm",
+		IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND, "mpm",
 		msm_mpm_irq);
 	if (ret) {
 		pr_err("request_irq failed errno: %d\n", ret);
@@ -584,37 +584,34 @@ reg_base_err:
 }
 
 static const struct of_device_id mpm_gic_chip_data_table[] = {
-#if defined(CONFIG_QCOM_MPM_BENGAL)
 	{
 		.compatible = "qcom,mpm-gic-bengal",
 		.data = mpm_bengal_gic_chip_data,
 	},
-#elif defined(CONFIG_QCOM_MPM_SCUBA)
 	{
 		.compatible = "qcom,mpm-gic-scuba",
 		.data = mpm_scuba_gic_chip_data,
 	},
-#elif defined(CONFIG_QCOM_MPM_SDM660)
+	{
+		.compatible = "qcom,mpm-gic-sdm630",
+		.data = mpm_sdm630_gic_chip_data,
+	},
 	{
 		.compatible = "qcom,mpm-gic-sdm660",
 		.data = mpm_sdm660_gic_chip_data,
 	},
-#elif defined(CONFIG_QCOM_MPM_MSM8937)
 	{
 		.compatible = "qcom,mpm-gic-msm8937",
 		.data = mpm_msm8937_gic_chip_data,
 	},
-#elif defined(CONFIG_QCOM_MPM_MSM8953)
 	{
 		.compatible = "qcom,mpm-gic-msm8953",
 		.data = mpm_msm8953_gic_chip_data,
 	},
-#elif defined(CONFIG_QCOM_MPM_KHAJE)
 	{
 		.compatible = "qcom,mpm-gic-khaje",
 		.data = mpm_khaje_gic_chip_data,
 	},
-#endif
 	{}
 };
 MODULE_DEVICE_TABLE(of, mpm_gic_chip_data_table);

@@ -40,20 +40,22 @@ menuconfig MSMB_CAMERA
        adds support for the camera driver stack including sensor, isp
        and postprocessing drivers.
 
-config MSMB_CAMERA_LEGACY
-     bool "QTI MSM camera and video capture 2.0 support for legacy devices"
-     depends on MSMB_CAMERA
+menuconfig MSMB_CAMERA_LEGACY
+     bool "QTI MSM camera and video capture 2.0 legacy support"
+     depends on ARCH_QCOM && VIDEO_V4L2 && I2C
+     select MSMB_CAMERA
      help
        Say Y here to enable selecting the video adapters for
        QTI msm camera and video capture 2.0, enabling this
        adds support for the camera driver stack including sensor, isp
-       and postprocessing drivers for legacy devices.
+       and postprocessing drivers.
+       Legacy msm-4.4 version
 
 config MSMB_CAMERA_OSS
-     bool "QTI MSM camera and video capture 2.0 (oss version)"
-     depends on MSMB_CAMERA
+     bool "QTI MSM camera and video capture 2.0 (OSS version)"
+     depends on MSMB_CAMERA && !MSMB_CAMERA_LEGACY
      help
-       Say Y here to use OSS Qualcomm msm camera and video capture 2.0.
+       Select the OSS camera stack and its matching userspace ABI.
 
 config MSMB_CAMERA_DEBUG
      bool "QTI MSM camera 2.0 debugging with printk"
@@ -65,28 +67,16 @@ config MSMB_CAMERA_DEBUG
        and postprocessing drivers.
        Enable printk() debug for msm camera 2.0.
 
-config XIAOMI_NEW_CAMERA_BLOBS
-     bool "Xiaomi new camera blobs"
-     depends on MACH_LONGCHEER
-     help
-       Enables the support for xiaomi new camera blobs.
-
-config XIAOMI_OLD_CAMERA_BLOBS
-     bool "Xiaomi old (Q) camera blobs"
-     depends on MACH_LONGCHEER
-     help
-       Enables the support for xiaomi old camera blobs.
-
 if MSMB_CAMERA
-if MSMB_CAMERA_LEGACY
-source "drivers/media/platform/msm/camera_v2-legacy/Kconfig"
-endif
-if !MSMB_CAMERA_LEGACY || !MSM_CAMERA_OSS
-source "drivers/media/platform/msm/camera_v2/Kconfig"
-endif
-if MSM_CAMERA_OSS
-source "drivers/media/platform/msm/camera_v2-oss/Kconfig"
-endif
+       if MSMB_CAMERA_LEGACY
+              source "drivers/media/platform/msm/camera_v2-legacy/Kconfig"
+       endif
+       if MSMB_CAMERA_OSS
+              source "drivers/media/platform/msm/camera_v2-oss/Kconfig"
+       endif
+       if !MSMB_CAMERA_LEGACY && !MSMB_CAMERA_OSS
+              source "drivers/media/platform/msm/camera_v2/Kconfig"
+       endif
 endif # MSMB_CAMERA
 
 source "drivers/media/platform/msm/cvp/Kconfig"

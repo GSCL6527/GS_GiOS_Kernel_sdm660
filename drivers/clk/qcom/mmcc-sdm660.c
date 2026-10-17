@@ -5,26 +5,25 @@
 
 #include <linux/kernel.h>
 #include <linux/bitops.h>
-#include <linux/clk-provider.h>
 #include <linux/err.h>
+#include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/platform_device.h>
+#include <linux/clk-provider.h>
 #include <linux/regmap.h>
 #include <linux/reset-controller.h>
-
 #include <dt-bindings/clock/qcom,mmcc-sdm660.h>
 
-#include "common.h"
-#include "reset.h"
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
+#include "common.h"
 #include "clk-pll.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
 #include "clk-voter.h"
+#include "reset.h"
 #include "vdd-level-660.h"
 
 #define F_SLEW(f, s, h, m, n, src_freq) { (f), (s), (2 * (h) - 1), (m), (n), \
@@ -3120,7 +3119,6 @@ static struct platform_driver mmcc_660_driver = {
 	.driver		= {
 		.name	= "mmcc-sdm660",
 		.of_match_table = mmcc_660_match_table,
-		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 
@@ -3135,6 +3133,3 @@ static void __exit mmcc_660_exit(void)
 	platform_driver_unregister(&mmcc_660_driver);
 }
 module_exit(mmcc_660_exit);
-
-MODULE_DESCRIPTION("Qualcomm SDM630/SDM660 MMCC driver");
-MODULE_LICENSE("GPL v2");

@@ -33,6 +33,9 @@
 #include <linux/of.h>
 #include <asm/current.h>
 #include <linux/timer.h>
+#include <linux/pid_namespace.h>
+#include <linux/sched/debug.h>
+#include <linux/sched/task.h>
 
 #include "peripheral-loader.h"
 
@@ -521,6 +524,24 @@ static void notif_timeout_handler(struct timer_list *t)
 	struct subsys_notif_timeout *timeout_data =
 		from_timer(timeout_data, t, timer);
 	enum ssr_comm comm_type = timeout_data->comm_type;
+	struct task_struct *task;
+
+	/*
+	 * The timer runs in another task: report the blocked caller, not only
+	 * the timer softirq stack. A PID lookup avoids retaining a task pointer
+	 * after a caller exits; cancel_timeout() drains this handler first.
+	 */
+	rcu_read_lock();
+	task = find_task_by_pid_ns(timeout_data->task_pid, &init_pid_ns);
+	if (task)
+		get_task_struct(task);
+	rcu_read_unlock();
+	if (task) {
+		pr_err("SSR timeout: comm %d, caller pid %d\n",
+		       comm_type, timeout_data->task_pid);
+		sched_show_task(task);
+		put_task_struct(task);
+	}
 
 	switch (comm_type) {
 	case SUBSYS_TO_SUBSYS_SYSMON:
@@ -567,6 +588,7 @@ static void _setup_timeout(struct subsys_desc *source_ss,
 		return;
 	}
 
+	timeout_data->task_pid = task_pid_nr(current);
 	timeout_data->comm_type = comm_type;
 	timeout = jiffies + msecs_to_jiffies(timeout_vals[comm_type]);
 	mod_timer(&timeout_data->timer, timeout);
@@ -1244,9 +1266,6 @@ int subsystem_restart_dev(struct subsys_device *dev)
 									name);
 		return 0;
 	}
-
-	if (!strcmp(name, "modem"))
-		dev->restart_level = RESET_SUBSYS_COUPLED;
 
 	switch (dev->restart_level) {
 
@@ -1985,7 +2004,8 @@ static int __init subsys_restart_init(void)
 {
 	int ret;
 
-	ssr_wq = alloc_workqueue("ssr_wq", WQ_UNBOUND | WQ_HIGHPRI, 0);
+	ssr_wq = alloc_workqueue("ssr_wq",
+		WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 0);
 	BUG_ON(!ssr_wq);
 
 	ret = bus_register(&subsys_bus_type);

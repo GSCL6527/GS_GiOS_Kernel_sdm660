@@ -55,7 +55,7 @@
 #include "mdss_mdp_trace.h"
 
 #define AXI_HALT_TIMEOUT_US	0x4000
-#define AUTOSUSPEND_TIMEOUT_MS	64
+#define AUTOSUSPEND_TIMEOUT_MS	200
 #define DEFAULT_MDP_PIPE_WIDTH	2048
 #define RES_1080p		(1088*1920)
 #define RES_UHD			(3840*2160)
@@ -1851,7 +1851,7 @@ static void __mdss_restore_sec_cfg(struct mdss_data_type *mdata)
 
 	ret = scm_restore_sec_cfg(SEC_DEVICE_MDSS, 0, &scm_ret);
 	if (ret || scm_ret)
-		pr_warn("scm_restore_sec_cfg failed %d %d\n",
+		pr_warn("scm_restore_sec_cfg failed %d %llu\n",
 				ret, scm_ret);
 
 	__mdss_mdp_reg_access_clk_enable(mdata, false);
@@ -2276,7 +2276,6 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdss_set_quirk(mdata, MDSS_QUIRK_MMSS_GDSC_COLLAPSE);
 		mdss_set_quirk(mdata, MDSS_QUIRK_MDP_CLK_SET_RATE);
 		mdss_set_quirk(mdata, MDSS_QUIRK_DMA_BI_DIR);
-		mdss_set_quirk(mdata, MDSS_QUIRK_HDR_SUPPORT_ENABLED);
 		mdata->has_wb_ubwc = true;
 		set_bit(MDSS_CAPS_10_BIT_SUPPORTED, mdata->mdss_caps_map);
 		set_bit(MDSS_CAPS_SEC_DETACH_SMMU, mdata->mdss_caps_map);
@@ -4770,7 +4769,7 @@ static int mdss_mdp_parse_dt_handler(struct platform_device *pdev,
 	rc = of_property_read_u32_array(pdev->dev.of_node, prop_name,
 					offsets, len);
 	if (rc) {
-		pr_debug("Error from prop %s : u32 array read\n", prop_name);
+		pr_err("Error from prop %s : u32 array read\n", prop_name);
 		return -EINVAL;
 	}
 

@@ -225,7 +225,8 @@ static int venus_write_queue(struct venus_hfi_device *hdev,
 	wr_ptr = (u32 *)(queue->qmem.kva + (wr_idx << 2));
 
 	if (wr_ptr < (u32 *)queue->qmem.kva ||
-	    wr_ptr > (u32 *)(queue->qmem.kva + queue->qmem.size - sizeof(*wr_ptr)))
+	    wr_ptr > (u32 *)(queue->qmem.kva +
+			queue->qmem.size - sizeof(*wr_ptr)))
 		return -EINVAL;
 
 	if (new_wr_idx < qsize) {
@@ -254,6 +255,7 @@ static int venus_write_queue(struct venus_hfi_device *hdev,
 static int venus_read_queue(struct venus_hfi_device *hdev,
 			    struct iface_queue *queue, void *pkt, u32 *tx_req)
 {
+	struct hfi_pkt_hdr *pkt_hdr = NULL;
 	struct hfi_queue_header *qhdr;
 	u32 dwords, new_rd_idx;
 	u32 rd_idx, wr_idx, type, qsize;
@@ -300,7 +302,8 @@ static int venus_read_queue(struct venus_hfi_device *hdev,
 	rd_ptr = (u32 *)(queue->qmem.kva + (rd_idx << 2));
 
 	if (rd_ptr < (u32 *)queue->qmem.kva ||
-	    rd_ptr > (u32 *)(queue->qmem.kva + queue->qmem.size - sizeof(*rd_ptr)))
+	    rd_ptr > (u32 *)(queue->qmem.kva +
+				queue->qmem.size - sizeof(*rd_ptr)))
 		return -EINVAL;
 
 	dwords = *rd_ptr >> 2;
@@ -319,6 +322,9 @@ static int venus_read_queue(struct venus_hfi_device *hdev,
 			memcpy(pkt, rd_ptr, len);
 			memcpy(pkt + len, queue->qmem.kva, new_rd_idx << 2);
 		}
+		pkt_hdr = (struct hfi_pkt_hdr *)(pkt);
+		if ((pkt_hdr->size >> 2) != dwords)
+			return -EINVAL;
 	} else {
 		/* bad packet received, dropping */
 		new_rd_idx = qhdr->write_idx;
@@ -1616,6 +1622,7 @@ void venus_hfi_destroy(struct venus_core *core)
 	mutex_destroy(&hdev->lock);
 	kfree(hdev);
 	core->priv = NULL;
+	disable_irq(core->irq);
 	core->ops = NULL;
 }
 

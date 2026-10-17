@@ -1621,7 +1621,7 @@ static noinline void print_circular_bug(struct lock_list *this,
 	int depth;
 
 	if (!lockdep_logging_off_graph_unlock() || debug_locks_silent)
-		return;
+		return 0;
 
 	if (!save_trace(&this->trace))
 		return;
@@ -2001,7 +2001,7 @@ print_bad_irq_dependency(struct task_struct *curr,
 			 const char *irqclass)
 {
 	if (!lockdep_logging_off_graph_unlock() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("=====================================================\n");
@@ -2317,7 +2317,7 @@ print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
 		   struct held_lock *next)
 {
 	if (!lockdep_logging_off_graph_unlock() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("============================================\n");
@@ -3032,7 +3032,7 @@ print_usage_bug(struct task_struct *curr, struct held_lock *this,
 		enum lock_usage_bit prev_bit, enum lock_usage_bit new_bit)
 {
 	if (!lockdep_logging_off_graph_unlock() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("================================\n");
@@ -3093,7 +3093,7 @@ print_irq_inversion_bug(struct task_struct *curr,
 	int depth;
 
 	if (!lockdep_logging_off_graph_unlock() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("========================================================\n");
@@ -3547,13 +3547,6 @@ mark_usage(struct task_struct *curr, struct held_lock *hlock, int check)
 		}
 	}
 
-lock_used:
-	/* mark it as used: */
-	if (!mark_lock(curr, hlock, LOCK_USED))
-		return 0;
-
-	return 1;
-
 out:
 	return 1;
 }
@@ -3627,8 +3620,7 @@ static int mark_lock(struct task_struct *curr, struct held_lock *this,
 		debug_atomic_dec(nr_unused_locks);
 		break;
 	default:
-		ret = mark_lock_irq(curr, this, new_bit);
-		if (!ret)
+		if (!lockdep_logging_off_graph_unlock())
 			return 0;
 	}
 
@@ -3813,14 +3805,17 @@ void lockdep_init_map_waits(struct lockdep_map *lock, const char *name,
 	 * Sanity check, the lock-class key must either have been allocated
 	 * statically or must have been registered as a dynamic key.
 	 */
-	if (!static_obj(key) && !is_dynamic_key(key) ) {
+	if (!static_obj(key)) {
 		/*
 		 * to make sure register_lock_class returns NULL
 		 * for a non static key
 		 */
 		lock->key = key;
-		if (debug_locks)
-			printk("BUG: key %px not in .data!\n", key);
+		printk("BUG: key %px not in .data!\n", key);
+		/*
+		 * to make sure register_lock_class returns NULL
+		 * for a non static key
+		 */
 		lockdep_warn_on(1);
 		return;
 	}
@@ -3853,7 +3848,7 @@ print_lock_nested_lock_not_held(struct task_struct *curr,
 				unsigned long ip)
 {
 	if (!lockdep_logging_off() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("==================================\n");
@@ -4015,8 +4010,11 @@ static int __lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 	else
 		hlock->acquire_ip_caller = ip_caller;
 
-	/* Initialize the lock usage bit */
-	mark_lock(curr, hlock, check);
+	if (check && !mark_irqflags(curr, hlock))
+		return 0;
+
+	/* mark it as used: */
+	mark_lock(curr, hlock, LOCK_USED);
 
 	/*
 	 * Calculate the chain hash: it's the combined hash of all the
@@ -4039,7 +4037,7 @@ static int __lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 		/*
 		 * How can we have a chain hash when we ain't got no keys?!
 		 */
-		if (lockdep_warn_on(chain_key != INITIAL_CHAIN_KEY))
+		if (lockdep_warn_on(chain_key != 0))
 			return 0;
 		chain_head = 1;
 	}
@@ -4095,7 +4093,7 @@ static void print_unlock_imbalance_bug(struct task_struct *curr,
 				       unsigned long ip)
 {
 	if (!lockdep_logging_off() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("=====================================\n");
@@ -4244,7 +4242,7 @@ __lock_set_class(struct lockdep_map *lock, const char *name,
 	if (!class)
 		return 0;
 
-	hlock->class_idx = class - lock_classes;
+	hlock->class_idx = class - lock_classes + 1;
 
 	curr->lockdep_depth = i;
 	curr->curr_chain_key = hlock->prev_chain_key;
@@ -4330,10 +4328,8 @@ __lock_release(struct lockdep_map *lock, unsigned long ip)
 	 * So we're all set to release this lock.. wait what lock? We don't
 	 * own any locks, you've been drinking again?
 	 */
-	if (depth <= 0) {
-		print_unlock_imbalance_bug(curr, lock, ip);
-		return 0;
-	}
+	if (lockdep_warn_on(depth <= 0))
+		return print_unlock_imbalance_bug(curr, lock, ip);
 
 	/*
 	 * Check whether the lock exists in the current stack
@@ -4386,7 +4382,8 @@ __lock_release(struct lockdep_map *lock, unsigned long ip)
 	 * We had N bottles of beer on the wall, we drank one, but now
 	 * there's not N-1 bottles of beer left on the wall...
 	 */
-	lockdep_warn_on(curr->lockdep_depth != depth-1);
+	if (lockdep_warn_on(curr->lockdep_depth != depth - 1))
+		return 0;
 
 	/*
 	 * Since reacquire_held_locks() would have called check_chain_key()
@@ -4600,8 +4597,7 @@ void lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 }
 EXPORT_SYMBOL_GPL(lock_acquire);
 
-void lock_release(struct lockdep_map *lock, int nested,
-			  unsigned long ip)
+void lock_release(struct lockdep_map *lock, unsigned long ip)
 {
 	unsigned long flags;
 
@@ -4699,7 +4695,7 @@ static void print_lock_contention_bug(struct task_struct *curr,
 				      unsigned long ip)
 {
 	if (!lockdep_logging_off() || debug_locks_silent)
-		return;
+		return 0;
 
 	pr_warn("\n");
 	pr_warn("=================================\n");
@@ -5243,8 +5239,21 @@ static void lockdep_reset_lock_reg(struct lockdep_map *lock)
 	__lockdep_reset_lock(pf, lock);
 	call_rcu_zapped(pf);
 
-	graph_unlock();
-out_irq:
+			if (unlikely(match)) {
+				if (lockdep_logging_off_graph_unlock()) {
+					/*
+					 * We all just reset everything, how did it match?
+					 */
+					WARN_ON(1);
+				}
+				goto out_restore;
+			}
+		}
+	}
+	if (locked)
+		graph_unlock();
+
+out_restore:
 	raw_local_irq_restore(flags);
 }
 

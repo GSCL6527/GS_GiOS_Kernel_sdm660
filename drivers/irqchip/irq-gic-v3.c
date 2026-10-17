@@ -41,6 +41,8 @@
 #include <asm/smp_plat.h>
 #include <asm/virt.h>
 
+#include <linux/syscore_ops.h>
+
 #include "irq-gic-common.h"
 
 struct redist_region {
@@ -170,6 +172,7 @@ static void gic_enable_redist(bool enable)
 				   enable ? "wakeup" : "sleep");
 }
 #else
+/* Firmware owns redistributor power on access-controlled platforms. */
 static void gic_enable_redist(bool enable) { }
 #endif
 
@@ -346,6 +349,92 @@ static int gic_irq_set_vcpu_affinity(struct irq_data *d, void *vcpu)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+
+static int gic_suspend(void)
+{
+	return 0;
+}
+
+/*
+ * gic_show_pending_irq - Shows the pending interrupts
+ * Note: Interrupts should be disabled on the cpu from which
+ * this is called to get accurate list of pending interrupts.
+ */
+void gic_show_pending_irqs(void)
+{
+	void __iomem *base;
+	u32 pending, enabled;
+	unsigned int j;
+
+	base = gic_data.dist_base;
+	for (j = 0; j * 32 < gic_data.irq_nr; j++) {
+		enabled = readl_relaxed(base +
+					GICD_ISENABLER + j * 4);
+		pending = readl_relaxed(base +
+					GICD_ISPENDR + j * 4);
+		pr_err("Pending and enabled irqs[%d] %x %x\n", j,
+				pending, enabled);
+
+	}
+}
+
+static void gic_show_resume_irq(struct gic_chip_data *gic)
+{
+	unsigned int i;
+	u32 enabled;
+	u32 pending[32];
+	void __iomem *base = gic_data.dist_base;
+
+	if (!msm_show_resume_irq_mask)
+		return;
+
+	for (i = 0; i * 32 < gic->irq_nr; i++) {
+		enabled = readl_relaxed(base + GICD_ICENABLER + i * 4);
+		pending[i] = readl_relaxed(base + GICD_ISPENDR + i * 4);
+		pending[i] &= enabled;
+	}
+
+	for (i = find_first_bit((unsigned long *)pending, gic->irq_nr);
+	     i < gic->irq_nr;
+	     i = find_next_bit((unsigned long *)pending, gic->irq_nr, i+1)) {
+		unsigned int irq = irq_find_mapping(gic->domain, i);
+		struct irq_desc *desc = irq_to_desc(irq);
+		const char *name = "null";
+
+		if (desc == NULL)
+			name = "stray irq";
+		else if (desc->action && desc->action->name)
+			name = desc->action->name;
+
+		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
+	}
+}
+
+static void gic_resume_one(struct gic_chip_data *gic)
+{
+	gic_show_resume_irq(gic);
+}
+
+static void gic_resume(void)
+{
+	gic_resume_one(&gic_data);
+}
+
+static struct syscore_ops gic_syscore_ops = {
+	.suspend = gic_suspend,
+	.resume = gic_resume,
+};
+
+static int __init gic_init_sys(void)
+{
+	register_syscore_ops(&gic_syscore_ops);
+	return 0;
+}
+arch_initcall(gic_init_sys);
+
+#endif
+
 static u64 gic_mpidr_to_affinity(unsigned long mpidr)
 {
 	u64 aff;
@@ -362,47 +451,53 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 {
 	u32 irqnr;
 
-	irqnr = gic_read_iar();
+	do {
+		irqnr = gic_read_iar();
 
-	if (likely(irqnr > 15 && irqnr < 1020) || irqnr >= 8192) {
-		int err;
+		if (likely(irqnr > 15 && irqnr < 1020) || irqnr >= 8192) {
+			int err;
 
-		if (static_branch_likely(&supports_deactivate_key))
-			gic_write_eoir(irqnr);
-		else
-			isb();
-
-		err = handle_domain_irq(gic_data.domain, irqnr, regs);
-		if (err) {
-			WARN_ONCE(true, "Unexpected interrupt received!\n");
-			log_abnormal_wakeup_reason(
-					"unexpected HW IRQ %u", irqnr);
-			if (static_branch_likely(&supports_deactivate_key)) {
-				if (irqnr < 8192)
-					gic_write_dir(irqnr);
-			} else {
+			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
+			if (static_branch_likely(&supports_deactivate_key))
 				gic_write_eoir(irqnr);
+			else
+				isb();
+
+			err = handle_domain_irq(gic_data.domain, irqnr, regs);
+			if (err) {
+				WARN_ONCE(true, "Unexpected interrupt received!\n");
+				log_abnormal_wakeup_reason(
+						"unexpected HW IRQ %u", irqnr);
+				if (static_branch_likely(&supports_deactivate_key)) {
+					if (irqnr < 8192)
+						gic_write_dir(irqnr);
+				} else {
+					gic_write_eoir(irqnr);
+				}
 			}
+			continue;
 		}
-		return;
-	}
-	if (irqnr < 16) {
-		gic_write_eoir(irqnr);
-		if (static_branch_likely(&supports_deactivate_key))
-			gic_write_dir(irqnr);
+		if (irqnr < 16) {
+			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
+			gic_write_eoir(irqnr);
+			if (static_branch_likely(&supports_deactivate_key))
+				gic_write_dir(irqnr);
 #ifdef CONFIG_SMP
-		/*
-		 * Unlike GICv2, we don't need an smp_rmb() here.
-		 * The control dependency from gic_read_iar to
-		 * the ISB in gic_write_eoir is enough to ensure
-		 * that any shared data read by handle_IPI will
-		 * be read after the ACK.
-		 */
-		handle_IPI(irqnr, regs);
+			/*
+			 * Unlike GICv2, we don't need an smp_rmb() here.
+			 * The control dependency from gic_read_iar to
+			 * the ISB in gic_write_eoir is enough to ensure
+			 * that any shared data read by handle_IPI will
+			 * be read after the ACK.
+			 */
+			handle_IPI(irqnr, regs);
 #else
-		WARN_ONCE(true, "Unexpected SGI received!\n");
+			WARN_ONCE(true, "Unexpected SGI received!\n");
 #endif
-	}
+			continue;
+		}
+		/* 1020-1023 are special IDs, not interrupts to drain. */
+	} while (irqnr < 1020 || irqnr >= 8192);
 }
 
 static void __init gic_dist_init(void)
@@ -744,6 +839,7 @@ static void gic_send_sgi(u64 cluster_id, u16 tlist, unsigned int irq)
 	       MPIDR_TO_SGI_RS(cluster_id)		|
 	       tlist << ICC_SGI1R_TARGET_LIST_SHIFT);
 
+	pr_devel("CPU%d: ICC_SGI1R_EL1 %llx\n", smp_processor_id(), val);
 	gic_write_sgi1r(val);
 }
 
@@ -772,7 +868,7 @@ static void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 	isb();
 }
 
-static void __init gic_smp_init(void)
+static void gic_smp_init(void)
 {
 	set_smp_cross_call(gic_raise_softirq);
 	cpuhp_setup_state_nocalls(CPUHP_AP_IRQ_GIC_STARTING,
@@ -840,7 +936,7 @@ static int gic_cpu_pm_notifier(struct notifier_block *self,
 	if (from_suspend)
 		return NOTIFY_OK;
 
-	if (cmd == CPU_PM_EXIT) {
+	if (cmd == CPU_PM_EXIT || cmd == CPU_PM_ENTER_FAILED) {
 		if (gic_dist_security_disabled())
 			gic_enable_redist(true);
 		gic_cpu_sys_reg_init();
@@ -1115,6 +1211,7 @@ static int __init gic_init_bases(void __iomem *dist_base,
 
 	gic_data.domain = irq_domain_create_tree(handle, &gic_irq_domain_ops,
 						 &gic_data);
+	irq_domain_update_bus_token(gic_data.domain, DOMAIN_BUS_WIRED);
 	gic_data.rdists.rdist = alloc_percpu(typeof(*gic_data.rdists.rdist));
 	gic_data.rdists.has_vlpis = true;
 	gic_data.rdists.has_direct_lpi = true;
@@ -1123,8 +1220,6 @@ static int __init gic_init_bases(void __iomem *dist_base,
 		err = -ENOMEM;
 		goto out_free;
 	}
-
-	irq_domain_update_bus_token(gic_data.domain, DOMAIN_BUS_WIRED);
 
 	gic_data.has_rss = !!(typer & GICD_TYPER_RSS);
 	pr_info("Distributor has %sRange Selector support\n",

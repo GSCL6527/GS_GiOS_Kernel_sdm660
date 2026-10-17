@@ -1,16 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Testsuite for BPF interpreter and BPF JIT compiler
  *
  * Copyright (c) 2011-2014 PLUMgrid, http://plumgrid.com
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of version 2 of the GNU General Public
- * License as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -39,6 +31,7 @@
 #define SKB_HASH	0x1234aaab
 #define SKB_QUEUE_MAP	123
 #define SKB_VLAN_TCI	0xffff
+#define SKB_VLAN_PRESENT	1
 #define SKB_DEV_IFINDEX	577
 #define SKB_DEV_TYPE	588
 
@@ -470,6 +463,79 @@ static int bpf_fill_stxdw(struct bpf_test *self)
 
 static struct bpf_test tests[] = {
 	{
+		"INT: JMP32 immediate ignores upper bits",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x100000001ULL),
+			BPF_JMP32_IMM(BPF_JEQ, R1, 1, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 register ignores upper bits",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x100000001ULL),
+			BPF_MOV64_IMM(R2, 1),
+			BPF_JMP32_REG(BPF_JEQ, R1, R2, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 signed immediate",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x1ffffffffULL),
+			BPF_JMP32_IMM(BPF_JSLT, R1, 0, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 signed register",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x1ffffffffULL),
+			BPF_MOV64_IMM(R2, 0),
+			BPF_JMP32_REG(BPF_JSLT, R1, R2, 2),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
+		"INT: JMP32 JSET ignores upper bits",
+		.u.insns_int = {
+			BPF_LD_IMM64(R1, 0x100000000ULL),
+			BPF_LD_IMM64(R2, 0x100000000ULL),
+			BPF_JMP32_REG(BPF_JSET, R1, R2, 2),
+			BPF_MOV64_IMM(R0, 1),
+			BPF_EXIT_INSN(),
+			BPF_MOV64_IMM(R0, 0),
+			BPF_EXIT_INSN(),
+		},
+		INTERNAL,
+		{ },
+		{ { 0, 1 } }
+	},
+	{
 		"TAX",
 		.u.insns = {
 			BPF_STMT(BPF_LD | BPF_IMM, 1),
@@ -725,8 +791,8 @@ static struct bpf_test tests[] = {
 		CLASSIC,
 		{ },
 		{
-			{ 1, SKB_VLAN_TCI & ~VLAN_TAG_PRESENT },
-			{ 10, SKB_VLAN_TCI & ~VLAN_TAG_PRESENT }
+			{ 1, SKB_VLAN_TCI },
+			{ 10, SKB_VLAN_TCI }
 		},
 	},
 	{
@@ -739,8 +805,8 @@ static struct bpf_test tests[] = {
 		CLASSIC,
 		{ },
 		{
-			{ 1, !!(SKB_VLAN_TCI & VLAN_TAG_PRESENT) },
-			{ 10, !!(SKB_VLAN_TCI & VLAN_TAG_PRESENT) }
+			{ 1, SKB_VLAN_PRESENT },
+			{ 10, SKB_VLAN_PRESENT }
 		},
 	},
 	{
@@ -5289,8 +5355,8 @@ static struct bpf_test tests[] = {
 #endif
 		{ },
 		{
-			{  1, !!(SKB_VLAN_TCI & VLAN_TAG_PRESENT) },
-			{ 10, !!(SKB_VLAN_TCI & VLAN_TAG_PRESENT) }
+			{  1, SKB_VLAN_PRESENT },
+			{ 10, SKB_VLAN_PRESENT }
 		},
 		.fill_helper = bpf_fill_maxinsns6,
 		.expected_errcode = -ENOTSUPP,
@@ -6493,6 +6559,7 @@ static struct sk_buff *populate_skb(char *buf, int size)
 	skb->hash = SKB_HASH;
 	skb->queue_mapping = SKB_QUEUE_MAP;
 	skb->vlan_tci = SKB_VLAN_TCI;
+	skb->vlan_present = SKB_VLAN_PRESENT;
 	skb->vlan_proto = htons(ETH_P_IP);
 	skb->dev = &dev;
 	skb->dev->ifindex = SKB_DEV_IFINDEX;
@@ -6665,12 +6732,14 @@ static int __run_one(const struct bpf_prog *fp, const void *data,
 	u64 start, finish;
 	int ret = 0, i;
 
+	migrate_disable();
 	start = ktime_get_ns();
 
 	for (i = 0; i < runs; i++)
 		ret = BPF_PROG_RUN(fp, data);
 
 	finish = ktime_get_ns();
+	migrate_enable();
 
 	*duration = finish - start;
 	do_div(*duration, runs);

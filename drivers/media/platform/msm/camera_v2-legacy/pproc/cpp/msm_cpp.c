@@ -28,9 +28,9 @@
 #include <linux/clk/qcom.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
-#include <media/msmb_camera-legacy.h>
-#include <media/msmb_generic_buf_mgr-legacy.h>
-#include <media/msmb_pproc-legacy.h>
+#include <media/msmb_camera.h>
+#include <media/msmb_generic_buf_mgr.h>
+#include <media/msmb_pproc.h>
 #include "msm_cpp.h"
 #include "msm_isp_util.h"
 #include "msm_camera_io_util.h"
@@ -46,7 +46,7 @@
 
 #define ENABLE_CPP_LOW		0
 
-#define CPP_CMD_TIMEOUT_MS	120
+#define CPP_CMD_TIMEOUT_MS	300
 #define MSM_CPP_INVALID_OFFSET	0x00000000
 #define MSM_CPP_NOMINAL_CLOCK	266670000
 #define MSM_CPP_TURBO_CLOCK	320000000
@@ -450,12 +450,10 @@ static unsigned long msm_cpp_queue_buffer_info(struct cpp_device *cpp_dev,
 	buff->map_info.buff_info = *buffer_info;
 	buff->map_info.buf_fd = buffer_info->fd;
 
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("fd %d index %d native_buff %d ssid %d %d\n",
 		buffer_info->fd, buffer_info->index,
 		buffer_info->native_buff, buff_queue->session_id,
 		buff_queue->stream_id);
-#endif
 
 	if (buff_queue->security_mode == SECURE_MODE)
 		rc = cam_smmu_get_stage2_phy_addr(cpp_dev->iommu_hdl,
@@ -487,12 +485,10 @@ static void msm_cpp_dequeue_buffer_info(struct cpp_device *cpp_dev,
 {
 	int ret = -1;
 
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("fd %d index %d native_buf %d ssid %d %d\n",
 		buff->map_info.buf_fd, buff->map_info.buff_info.index,
 		buff->map_info.buff_info.native_buff, buff_queue->session_id,
 		buff_queue->stream_id);
-#endif
 
 	if (buff_queue->security_mode == SECURE_MODE)
 		ret = cam_smmu_put_stage2_phy_addr(cpp_dev->iommu_hdl,
@@ -1104,7 +1100,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 			goto clk_failed;
 		}
 	}
-
+	msm_cpp_update_bandwidth(cpp_dev, 0x1000, 0x1000);
 	rc = msm_camera_clk_enable(&cpp_dev->pdev->dev, cpp_dev->clk_info,
 			cpp_dev->cpp_clk, cpp_dev->num_clks, true);
 	if (rc < 0) {
@@ -1142,7 +1138,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 		if (vbif_version == VBIF_VERSION_2_3_0)
 			cpp_dev->hw_info.cpp_hw_version = CPP_HW_VERSION_4_0_0;
 	}
-	CPP_DBG("CPP HW Version: 0x%x\n", cpp_dev->hw_info.cpp_hw_version);
+	pr_info("CPP HW Version: 0x%x\n", cpp_dev->hw_info.cpp_hw_version);
 	cpp_dev->hw_info.cpp_hw_caps =
 		msm_camera_io_r(cpp_dev->cpp_hw_base + 0x4);
 
@@ -1160,7 +1156,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 			__func__, rc);
 		goto pwr_collapse_reset;
 	}
-	CPP_DBG("stream_cnt:%d\n", cpp_dev->stream_cnt);
+	pr_err("stream_cnt:%d\n", cpp_dev->stream_cnt);
 	cpp_dev->stream_cnt = 0;
 	if (cpp_dev->fw_name_bin) {
 		msm_camera_enable_irq(cpp_dev->irq, false);
@@ -1223,7 +1219,7 @@ static void cpp_release_hardware(struct cpp_device *cpp_dev)
 		rc = msm_cpp_update_bandwidth_setting(cpp_dev, 0, 0);
 	}
 	cpp_dev->stream_cnt = 0;
-	CPP_DBG("cpp hw release done\n");
+	pr_info("cpp hw release done\n");
 }
 
 static int32_t cpp_load_fw(struct cpp_device *cpp_dev, char *fw_name_bin)
@@ -1607,7 +1603,6 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		/* clear IRQ status */
 		msm_camera_io_w(0xFFFFF, cpp_dev->cpp_hw_base + 0x14);
 		counter = 0;
-
 		/* MMSS_A_CPP_RST_CMD_0 = 0x8, firmware reset = 0x3DF77 */
 		msm_camera_io_w(0x3DF77, cpp_dev->cpp_hw_base + 0x8);
 
@@ -1624,7 +1619,6 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 			usleep_range(200, 250);
 			counter++;
 		}
-
 		pr_debug("CPP reset done counter %d result 0x%x\n",
 			counter, result);
 

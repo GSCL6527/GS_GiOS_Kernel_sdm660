@@ -15,9 +15,7 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#ifdef CONFIG_ICNSS_DEBUG
 #include <linux/debugfs.h>
-#endif
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
@@ -50,10 +48,8 @@
 #include "icnss_qmi.h"
 
 #define MAX_PROP_SIZE			32
-#ifdef CONFIG_IPC_LOGGING
 #define NUM_LOG_PAGES			10
 #define NUM_LOG_LONG_PAGES		4
-#endif
 #define ICNSS_MAGIC			0x5abc5abc
 
 #define ICNSS_SERVICE_LOCATION_CLIENT_NAME			"ICNSS-WLAN"
@@ -2103,8 +2099,8 @@ int icnss_unregister_driver(struct icnss_driver_ops *ops)
 
 	icnss_pr_dbg("Unregistering driver, state: 0x%lx\n", penv->state);
 
-	if (!penv->ops || (!test_bit(ICNSS_DRIVER_PROBED, &penv->state))) {
-		icnss_pr_err("Driver not registered/probed\n");
+	if (!penv->ops) {
+		icnss_pr_err("Driver not registered\n");
 		ret = -ENOENT;
 		goto out;
 	}
@@ -2510,7 +2506,7 @@ int icnss_smmu_map(struct device *dev,
 	priv->smmu_iova_ipa_current = iova + len;
 	*iova_addr = (uint32_t)(iova + paddr - rounddown(paddr, PAGE_SIZE));
 
-	icnss_pr_dbg("IOVA addr mapped to physical addr %u\n", *iova_addr);
+	icnss_pr_dbg("IOVA addr mapped to physical addr %lx\n", *iova_addr);
 	return 0;
 }
 EXPORT_SYMBOL(icnss_smmu_map);
@@ -3046,8 +3042,8 @@ static int icnss_stats_show_state(struct seq_file *s, struct icnss_priv *priv)
 		case ICNSS_PM_SUSPEND:
 			seq_puts(s, "PM SUSPEND");
 			continue;
-		case ICNSS_PM_SUSPEND_LATE:
-			seq_puts(s, "PM SUSPEND LATE");
+		case ICNSS_PM_SUSPEND_NOIRQ:
+			seq_puts(s, "PM SUSPEND NOIRQ");
 			continue;
 		case ICNSS_SSR_REGISTERED:
 			seq_puts(s, "SSR REGISTERED");
@@ -3216,10 +3212,10 @@ static int icnss_stats_show(struct seq_file *s, void *data)
 	ICNSS_STATS_DUMP(s, priv, pm_suspend_err);
 	ICNSS_STATS_DUMP(s, priv, pm_resume);
 	ICNSS_STATS_DUMP(s, priv, pm_resume_err);
-	ICNSS_STATS_DUMP(s, priv, pm_suspend_late);
-	ICNSS_STATS_DUMP(s, priv, pm_suspend_late_err);
-	ICNSS_STATS_DUMP(s, priv, pm_resume_early);
-	ICNSS_STATS_DUMP(s, priv, pm_resume_early_err);
+	ICNSS_STATS_DUMP(s, priv, pm_suspend_noirq);
+	ICNSS_STATS_DUMP(s, priv, pm_suspend_noirq_err);
+	ICNSS_STATS_DUMP(s, priv, pm_resume_noirq);
+	ICNSS_STATS_DUMP(s, priv, pm_resume_noirq_err);
 	ICNSS_STATS_DUMP(s, priv, pm_stay_awake);
 	ICNSS_STATS_DUMP(s, priv, pm_relax);
 
@@ -3506,12 +3502,32 @@ static int icnss_debugfs_create(struct icnss_priv *priv)
 out:
 	return ret;
 }
+#else
+static int icnss_debugfs_create(struct icnss_priv *priv)
+{
+	int ret = 0;
+	struct dentry *root_dentry;
+
+	root_dentry = debugfs_create_dir("icnss", NULL);
+
+	if (IS_ERR(root_dentry)) {
+		ret = PTR_ERR(root_dentry);
+		icnss_pr_err("Unable to create debugfs %d\n", ret);
+		return ret;
+	}
+
+	priv->root_dentry = root_dentry;
+
+	debugfs_create_file("stats", 0600, root_dentry, priv,
+			    &icnss_stats_fops);
+	return 0;
+}
+#endif
 
 static void icnss_debugfs_destroy(struct icnss_priv *priv)
 {
 	debugfs_remove_recursive(priv->root_dentry);
 }
-#endif
 
 static void icnss_sysfs_create(struct icnss_priv *priv)
 {
@@ -3846,8 +3862,6 @@ static int icnss_probe(struct platform_device *pdev)
 	if (ret)
 		goto out;
 
-	device_enable_async_suspend(dev);
-
 	spin_lock_init(&priv->event_lock);
 	spin_lock_init(&priv->on_off_lock);
 	mutex_init(&priv->dev_lock);
@@ -3870,9 +3884,7 @@ static int icnss_probe(struct platform_device *pdev)
 
 	icnss_enable_recovery(priv);
 
-#ifdef CONFIG_ICNSS_DEBUG
 	icnss_debugfs_create(priv);
-#endif
 
 	icnss_sysfs_create(priv);
 
@@ -3907,9 +3919,7 @@ static int icnss_remove(struct platform_device *pdev)
 
 	icnss_unregister_power_supply_notifier(penv);
 
-#ifdef CONFIG_ICNSS_DEBUG
 	icnss_debugfs_destroy(penv);
-#endif
 
 	icnss_sysfs_destroy(penv);
 
@@ -3996,60 +4006,60 @@ out:
 	return ret;
 }
 
-static int icnss_pm_suspend_late(struct device *dev)
+static int icnss_pm_suspend_noirq(struct device *dev)
 {
 	struct icnss_priv *priv = dev_get_drvdata(dev);
 	int ret = 0;
 
 	if (priv->magic != ICNSS_MAGIC) {
-		icnss_pr_err("Invalid drvdata for pm suspend_late: dev %pK, data %pK, magic 0x%x\n",
+		icnss_pr_err("Invalid drvdata for pm suspend_noirq: dev %pK, data %pK, magic 0x%x\n",
 			     dev, priv, priv->magic);
 		return -EINVAL;
 	}
 
-	icnss_pr_vdbg("PM suspend_late, state: 0x%lx\n", priv->state);
+	icnss_pr_vdbg("PM suspend_noirq, state: 0x%lx\n", priv->state);
 
-	if (!priv->ops || !priv->ops->suspend_late ||
+	if (!priv->ops || !priv->ops->suspend_noirq ||
 	    !test_bit(ICNSS_DRIVER_PROBED, &priv->state))
 		goto out;
 
-	ret = priv->ops->suspend_late(dev);
+	ret = priv->ops->suspend_noirq(dev);
 
 out:
 	if (ret == 0) {
-		priv->stats.pm_suspend_late++;
-		set_bit(ICNSS_PM_SUSPEND_LATE, &priv->state);
+		priv->stats.pm_suspend_noirq++;
+		set_bit(ICNSS_PM_SUSPEND_NOIRQ, &priv->state);
 	} else {
-		priv->stats.pm_suspend_late_err++;
+		priv->stats.pm_suspend_noirq_err++;
 	}
 	return ret;
 }
 
-static int icnss_pm_resume_early(struct device *dev)
+static int icnss_pm_resume_noirq(struct device *dev)
 {
 	struct icnss_priv *priv = dev_get_drvdata(dev);
 	int ret = 0;
 
 	if (priv->magic != ICNSS_MAGIC) {
-		icnss_pr_err("Invalid drvdata for pm resume_early: dev %pK, data %pK, magic 0x%x\n",
+		icnss_pr_err("Invalid drvdata for pm resume_noirq: dev %pK, data %pK, magic 0x%x\n",
 			     dev, priv, priv->magic);
 		return -EINVAL;
 	}
 
-	icnss_pr_vdbg("PM resume_early, state: 0x%lx\n", priv->state);
+	icnss_pr_vdbg("PM resume_noirq, state: 0x%lx\n", priv->state);
 
-	if (!priv->ops || !priv->ops->resume_early ||
+	if (!priv->ops || !priv->ops->resume_noirq ||
 	    !test_bit(ICNSS_DRIVER_PROBED, &priv->state))
 		goto out;
 
-	ret = priv->ops->resume_early(dev);
+	ret = priv->ops->resume_noirq(dev);
 
 out:
 	if (ret == 0) {
-		priv->stats.pm_resume_early++;
-		clear_bit(ICNSS_PM_SUSPEND_LATE, &priv->state);
+		priv->stats.pm_resume_noirq++;
+		clear_bit(ICNSS_PM_SUSPEND_NOIRQ, &priv->state);
 	} else {
-		priv->stats.pm_resume_early_err++;
+		priv->stats.pm_resume_noirq_err++;
 	}
 	return ret;
 }
@@ -4058,8 +4068,8 @@ out:
 static const struct dev_pm_ops icnss_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(icnss_pm_suspend,
 				icnss_pm_resume)
-	SET_LATE_SYSTEM_SLEEP_PM_OPS(icnss_pm_suspend_late,
-				      icnss_pm_resume_early)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(icnss_pm_suspend_noirq,
+				      icnss_pm_resume_noirq)
 };
 
 static const struct of_device_id icnss_dt_match[] = {
@@ -4076,13 +4086,11 @@ static struct platform_driver icnss_driver = {
 		.name = "icnss",
 		.pm = &icnss_pm_ops,
 		.of_match_table = icnss_dt_match,
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
 static int __init icnss_initialize(void)
 {
-#ifdef CONFIG_IPC_LOGGING
 	icnss_ipc_log_context = ipc_log_context_create(NUM_LOG_PAGES,
 						       "icnss", 0);
 	if (!icnss_ipc_log_context)
@@ -4092,7 +4100,6 @@ static int __init icnss_initialize(void)
 						       "icnss_long", 0);
 	if (!icnss_ipc_log_long_context)
 		icnss_pr_err("Unable to create log long context\n");
-#endif
 
 	return platform_driver_register(&icnss_driver);
 }

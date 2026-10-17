@@ -4456,13 +4456,7 @@ exit:
 	pr_debug("exit\n");
 }
 
-#if defined(CONFIG_MACH_XIAOMI_TULIP) || defined(CONFIG_MACH_XIAOMI_WHYRED)
-#define ENABLE_DP_SETUP 0
-#else
-#define ENABLE_DP_SETUP 1
-#endif
-
-static int __maybe_unused mdss_dp_usbpd_setup(struct mdss_dp_drv_pdata *dp_drv)
+static int mdss_dp_usbpd_setup(struct mdss_dp_drv_pdata *dp_drv)
 {
 	int ret = 0;
 	const char *pd_phandle = "qcom,dp-usbpd-detection";
@@ -4471,7 +4465,7 @@ static int __maybe_unused mdss_dp_usbpd_setup(struct mdss_dp_drv_pdata *dp_drv)
 						    pd_phandle);
 
 	if (IS_ERR(dp_drv->pd)) {
-		pr_debug("get_usbpd phandle failed (%ld)\n",
+		pr_err("get_usbpd phandle failed (%ld)\n",
 				PTR_ERR(dp_drv->pd));
 		return PTR_ERR(dp_drv->pd);
 	}
@@ -4544,13 +4538,11 @@ static int mdss_dp_probe(struct platform_device *pdev)
 	init_completion(&dp_drv->video_comp);
 	init_completion(&dp_drv->audio_comp);
 
-#if ENABLE_DP_SETUP
 	if (mdss_dp_usbpd_setup(dp_drv)) {
-		pr_debug("Error usbpd setup!\n");
+		pr_err("Error usbpd setup!\n");
 		dp_drv = NULL;
 		return -EPROBE_DEFER;
 	}
-#endif
 
 	ret = mdss_retrieve_dp_ctrl_resources(pdev, dp_drv);
 	if (ret)

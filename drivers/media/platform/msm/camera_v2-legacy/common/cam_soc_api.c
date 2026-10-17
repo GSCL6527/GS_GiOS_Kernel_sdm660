@@ -713,11 +713,10 @@ int msm_camera_regulator_set_mode(struct msm_cam_regulator *vdd_info,
 			} else {
 				rc = regulator_set_mode(tmp->vdd,
 					REGULATOR_MODE_NORMAL);
-				if (rc < 0) {
+				if (rc < 0)
 					pr_err("regulator disable failed %d\n",
 						i);
 					goto error;
-				}
 			}
 		}
 		tmp++;
@@ -742,10 +741,9 @@ void msm_camera_put_regulators(struct platform_device *pdev,
 	}
 
 	for (i = cnt - 1; i >= 0; i--) {
-		if (vdd_info[i] && !IS_ERR_OR_NULL(vdd_info[i]->vdd)) {
+		if (vdd_info[i] && !IS_ERR_OR_NULL(vdd_info[i]->vdd))
 			devm_regulator_put(vdd_info[i]->vdd);
 			CDBG("vdd ptr[%d] :%pK\n", i, vdd_info[i]->vdd);
-		}
 	}
 
 	devm_kfree(&pdev->dev, *vdd_info);
@@ -776,7 +774,7 @@ int msm_camera_register_irq(struct platform_device *pdev,
 		pr_err("Invalid params\n");
 		return -EINVAL;
 	}
-	rc = request_threaded_irq(irq->start, handler, NULL,
+	rc =  request_threaded_irq(irq->start, handler, NULL,
                 irqflags, irq_name, dev_id);
 
 	if (rc < 0) {
@@ -840,7 +838,6 @@ int msm_camera_unregister_irq(struct platform_device *pdev,
 		pr_err("Invalid params\n");
 		return -EINVAL;
 	}
-
 	free_irq(irq->start, dev_id);
 	CDBG("Un Registering irq for [resource - %pK]\n", irq);
 

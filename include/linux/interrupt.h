@@ -232,6 +232,7 @@ extern void reaffine_perf_irqs(bool from_hotplug);
  * @irq:		Interrupt to which notification applies
  * @kref:		Reference count, for internal use
  * @work:		Work item, for internal use
+ * @next:		Additional listener linkage, for internal use
  * @notify:		Function to be called on change.  This will be
  *			called in process context.
  * @release:		Function to be called on release.  This will be
@@ -243,6 +244,7 @@ struct irq_affinity_notify {
 	unsigned int irq;
 	struct kref kref;
 	struct work_struct work;
+	struct irq_affinity_notify *next;
 	void (*notify)(struct irq_affinity_notify *, const cpumask_t *mask);
 	void (*release)(struct kref *ref);
 };
@@ -304,6 +306,8 @@ extern int irq_set_affinity_hint(unsigned int irq, const struct cpumask *m);
 
 extern int
 irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
+int irq_add_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
+void irq_remove_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
 
 struct cpumask *irq_create_affinity_masks(int nvec, const struct irq_affinity *affd);
 int irq_calc_affinity_vectors(int minvec, int maxvec, const struct irq_affinity *affd);
@@ -339,6 +343,17 @@ irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
 	return 0;
 }
 
+static inline int
+irq_add_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
+{
+	return 0;
+}
+
+static inline void
+irq_remove_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
+{
+}
+
 static inline struct cpumask *
 irq_create_affinity_masks(int nvec, const struct irq_affinity *affd)
 {
@@ -367,7 +382,7 @@ irq_calc_affinity_vectors(int minvec, int maxvec, const struct irq_affinity *aff
 static inline void disable_irq_nosync_lockdep(unsigned int irq)
 {
 	disable_irq_nosync(irq);
-#ifdef CONFIG_LOCKDEP
+#if defined(CONFIG_LOCKDEP) && !defined(CONFIG_PREEMPT_RT)
 	local_irq_disable();
 #endif
 }
@@ -375,7 +390,7 @@ static inline void disable_irq_nosync_lockdep(unsigned int irq)
 static inline void disable_irq_nosync_lockdep_irqsave(unsigned int irq, unsigned long *flags)
 {
 	disable_irq_nosync(irq);
-#ifdef CONFIG_LOCKDEP
+#if defined(CONFIG_LOCKDEP) && !defined(CONFIG_PREEMPT_RT)
 	local_irq_save(*flags);
 #endif
 }
@@ -390,7 +405,7 @@ static inline void disable_irq_lockdep(unsigned int irq)
 
 static inline void enable_irq_lockdep(unsigned int irq)
 {
-#ifdef CONFIG_LOCKDEP
+#if defined(CONFIG_LOCKDEP) && !defined(CONFIG_PREEMPT_RT)
 	local_irq_enable();
 #endif
 	enable_irq(irq);
@@ -398,7 +413,7 @@ static inline void enable_irq_lockdep(unsigned int irq)
 
 static inline void enable_irq_lockdep_irqrestore(unsigned int irq, unsigned long *flags)
 {
-#ifdef CONFIG_LOCKDEP
+#if defined(CONFIG_LOCKDEP) && !defined(CONFIG_PREEMPT_RT)
 	local_irq_restore(*flags);
 #endif
 	enable_irq(irq);

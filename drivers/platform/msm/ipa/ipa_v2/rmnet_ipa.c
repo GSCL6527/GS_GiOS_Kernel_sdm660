@@ -94,7 +94,7 @@ enum wwan_device_status {
 
 struct ipa_rmnet_plat_drv_res {
 	bool ipa_rmnet_ssr;
-	bool is_platform_type_msm;
+	bool ipa_loaduC;
 	bool ipa_advertise_sg_support;
 	bool ipa_napi_enable;
 	u32 wan_rx_desc_size;
@@ -1063,9 +1063,9 @@ static int ipa_wwan_change_mtu(struct net_device *dev, int new_mtu)
  * later
  * -EFAULT: Error while transmitting the skb
  */
-static netdev_tx_t ipa_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
+static int ipa_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	netdev_tx_t ret = NETDEV_TX_OK;
+	int ret = 0;
 	bool qmap_check;
 	struct wwan_private *wwan_ptr = netdev_priv(dev);
 	struct ipa_tx_meta meta;
@@ -1217,7 +1217,7 @@ static void apps_ipa_packet_receive_notify(void *priv,
 {
 	struct net_device *dev = (struct net_device *)priv;
 
-	if (likely(evt == IPA_RECEIVE)) {
+	if (evt == IPA_RECEIVE) {
 		struct sk_buff *skb = (struct sk_buff *)data;
 		int result;
 		unsigned int packet_len = skb->len;
@@ -1240,7 +1240,7 @@ static void apps_ipa_packet_receive_notify(void *priv,
 			}
 		}
 
-		if (unlikely(result))	{
+		if (result)	{
 			pr_err_ratelimited(DEV_NAME " %s:%d fail on netif_receive_skb\n",
 							   __func__, __LINE__);
 			dev->stats.rx_dropped++;
@@ -1728,7 +1728,7 @@ static void ipa_wwan_setup(struct net_device *dev)
 	dev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
 	dev->needed_headroom = HEADROOM_FOR_QMAP;
 	dev->needed_tailroom = TAILROOM;
-	dev->watchdog_timeo = msecs_to_jiffies(10000);
+	dev->watchdog_timeo = 1000;
 }
 
 /* IPA_RM related functions start*/
@@ -1955,11 +1955,11 @@ static int get_ipa_rmnet_dts_configuration(struct platform_device *pdev,
 			"qcom,rmnet-ipa-ssr");
 	pr_info("IPA SSR support = %s\n",
 		ipa_rmnet_drv_res->ipa_rmnet_ssr ? "True" : "False");
-	ipa_rmnet_drv_res->is_platform_type_msm =
+	ipa_rmnet_drv_res->ipa_loaduC =
 			of_property_read_bool(pdev->dev.of_node,
-			"qcom,ipa-platform-type-msm");
-	pr_info("IPA is_platform_type_msm = %s\n",
-		ipa_rmnet_drv_res->is_platform_type_msm ? "True" : "False");
+			"qcom,ipa-loaduC");
+	pr_info("IPA ipa-loaduC = %s\n",
+		ipa_rmnet_drv_res->ipa_loaduC ? "True" : "False");
 
 	ipa_rmnet_drv_res->ipa_advertise_sg_support =
 			of_property_read_bool(pdev->dev.of_node,
@@ -2037,7 +2037,7 @@ static int ipa_wwan_probe(struct platform_device *pdev)
 		memset(&mux_channel[i], 0, sizeof(struct rmnet_mux_val));
 
 	/* start A7 QMI service/client */
-	if (ipa_rmnet_res.is_platform_type_msm)
+	if (ipa_rmnet_res.ipa_loaduC)
 		/* Android platform loads uC */
 		ipa_qmi_service_init(QMI_IPA_PLATFORM_TYPE_MSM_ANDROID_V01);
 	else
@@ -2280,7 +2280,11 @@ static int rmnet_ipa_ap_suspend(struct device *dev)
 
 	/* Make sure that there is no Tx operation ongoing */
 	netif_tx_lock_bh(netdev);
-	netif_device_detach(netdev);
+	netif_stop_queue(netdev);
+
+	/* Stoppig Watch dog timer when pipe was in suspend state */
+	if (del_timer(&netdev->watchdog_timer))
+		dev_put(netdev);
 
 	ipa_rm_release_resource(IPA_RM_RESOURCE_WWAN_0_PROD);
 	netif_tx_unlock_bh(netdev);
@@ -2305,8 +2309,10 @@ static int rmnet_ipa_ap_resume(struct device *dev)
 
 	IPAWANDBG_LOW("Enter...\n");
 	if (netdev) {
-		netif_device_attach(netdev);
-		netif_trans_update(netdev);
+		netif_wake_queue(netdev);
+		/* Starting Watch dog timer, pipe was changes to resume state */
+		if (netif_running(netdev) && netdev->watchdog_timeo <= 0)
+			__netdev_watchdog_up(netdev);
 	}
 	IPAWANDBG_LOW("Exit\n");
 
@@ -2326,8 +2332,8 @@ static const struct of_device_id rmnet_ipa_dt_match[] = {
 MODULE_DEVICE_TABLE(of, rmnet_ipa_dt_match);
 
 static const struct dev_pm_ops rmnet_ipa_pm_ops = {
-	.suspend_late = rmnet_ipa_ap_suspend,
-	.resume_early = rmnet_ipa_ap_resume,
+	.suspend_noirq = rmnet_ipa_ap_suspend,
+	.resume_noirq = rmnet_ipa_ap_resume,
 };
 
 static struct platform_driver rmnet_ipa_driver = {
@@ -2498,8 +2504,7 @@ static void tethering_stats_poll_queue(struct work_struct *work)
 
 	/* Schedule again only if there's an active polling interval */
 	if (ipa_rmnet_ctx.polling_interval != 0)
-		queue_delayed_work(system_power_efficient_wq, 
-					    &ipa_tether_stats_poll_wakequeue_work,
+		schedule_delayed_work(&ipa_tether_stats_poll_wakequeue_work,
 			msecs_to_jiffies(ipa_rmnet_ctx.polling_interval*1000));
 }
 
@@ -2593,8 +2598,7 @@ int rmnet_ipa_poll_tethering_stats(struct wan_ioctl_poll_tethering_stats *data)
 		return 0;
 	}
 
-	queue_delayed_work(system_power_efficient_wq, 
-				    &ipa_tether_stats_poll_wakequeue_work, 0);
+	schedule_delayed_work(&ipa_tether_stats_poll_wakequeue_work, 0);
 	return 0;
 }
 
@@ -2625,9 +2629,9 @@ static int rmnet_ipa_set_data_quota_modem(struct wan_ioctl_set_data_quota *data)
 	data->interface_name[IFNAMSIZ-1] = '\0';
 
 	index = find_vchannel_name_index(data->interface_name);
-	pr_err_once("%s: iface name %s, quota %lu\n", __func__,
-		    data->interface_name,
-		    (unsigned long) data->quota_mbytes);
+	IPAWANERR("iface name %s, quota %lu\n",
+			  data->interface_name,
+			  (unsigned long) data->quota_mbytes);
 
 	if (index == MAX_NUM_OF_MUX_CHANNEL) {
 		IPAWANERR("%s is an invalid iface name\n",

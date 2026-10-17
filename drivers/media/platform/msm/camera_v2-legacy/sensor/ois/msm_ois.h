@@ -14,9 +14,9 @@
 
 #include <linux/i2c.h>
 #include <linux/gpio.h>
-#include <soc/qcom/camera2-legacy.h>
+#include <soc/qcom/camera2.h>
 #include <media/v4l2-subdev.h>
-#include <media/msmb_camera-legacy.h>
+#include <media/msmb_camera.h>
 #include "msm_camera_i2c.h"
 #include "msm_camera_dt_util.h"
 #include "msm_camera_io_util.h"
@@ -68,6 +68,11 @@ struct msm_ois_ctrl_t {
 	struct msm_pinctrl_info pinctrl_info;
 	uint8_t cam_pinctrl_status;
 	struct msm_ois_board_info *oboard_info;
+#ifdef CONFIG_MACH_XIAOMI_JASON
+	struct msm_cam_clk_info *clk_info;
+	struct clk **clk_ptr;
+	size_t clk_info_size;
+#endif
 };
 
 #endif

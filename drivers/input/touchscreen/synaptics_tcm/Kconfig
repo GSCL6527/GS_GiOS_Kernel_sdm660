@@ -5,7 +5,8 @@ menuconfig TOUCHSCREEN_SYNAPTICS_TCM
 	bool "Synaptics TCM touchscreen"
 	default y
 	help
-	  Say Y here, if you have a Synaptics TCM touchscreen connected.
+	  Say Y here if you have a Synaptics TCM touchscreen connected
+	  to your system.
 
 	  If unsure, say N.
 
@@ -17,14 +18,31 @@ choice
 config TOUCHSCREEN_SYNAPTICS_TCM_I2C
 	bool "I2C"
 	depends on I2C
+	help
+	  Say Y here to use I2C bus for communication.
+
+	  Else, say N.
+
+	  This will configure I2C bus for communicating
+	  with touch controller.
+
 config TOUCHSCREEN_SYNAPTICS_TCM_SPI
 	bool "SPI"
 	depends on SPI_MASTER
+	help
+	  Say Y here to use SPI bus for communication.
+
+	  Else, say N.
+
+	  This will configure SPI bus for communicating
+	  with touch controller.
+
 endchoice
 
 config TOUCHSCREEN_SYNAPTICS_TCM_CORE
 	tristate "Synaptics TCM core module"
 	depends on I2C || SPI_MASTER
+	default y
 	help
 	  Say Y here to enable core functionality.
 
@@ -36,6 +54,7 @@ config TOUCHSCREEN_SYNAPTICS_TCM_CORE
 config TOUCHSCREEN_SYNAPTICS_TCM_TOUCH
 	tristate "Synaptics TCM touch module"
 	depends on TOUCHSCREEN_SYNAPTICS_TCM_CORE
+	default y
 	help
 	  Say Y here to enable support for touch reporting.
 
@@ -47,6 +66,7 @@ config TOUCHSCREEN_SYNAPTICS_TCM_TOUCH
 config TOUCHSCREEN_SYNAPTICS_TCM_DEVICE
 	tristate "Synaptics TCM device module"
 	depends on TOUCHSCREEN_SYNAPTICS_TCM_CORE
+	default y
 	help
 	  Say Y here to enable support for TCM device functionality.
 
@@ -69,6 +89,7 @@ config TOUCHSCREEN_SYNAPTICS_TCM_TESTING
 config TOUCHSCREEN_SYNAPTICS_TCM_REFLASH
 	tristate "Synaptics TCM reflash module"
 	depends on TOUCHSCREEN_SYNAPTICS_TCM_CORE
+	default N
 	help
 	  Say Y here to enable support for reflash functionality.
 
@@ -80,6 +101,7 @@ config TOUCHSCREEN_SYNAPTICS_TCM_REFLASH
 config TOUCHSCREEN_SYNAPTICS_TCM_RECOVERY
 	tristate "Synaptics TCM recovery module"
 	depends on TOUCHSCREEN_SYNAPTICS_TCM_CORE
+	default N
 	help
 	  Say Y here to enable support for recovery functionality.
 
@@ -102,6 +124,7 @@ config TOUCHSCREEN_SYNAPTICS_TCM_ZEROFLASH
 config TOUCHSCREEN_SYNAPTICS_TCM_DIAGNOSTICS
 	tristate "Synaptics TCM diagnostics module"
 	depends on TOUCHSCREEN_SYNAPTICS_TCM_CORE
+	default y
 	help
 	  Say Y here to enable support for diagnostics functionality.
 
