@@ -2467,7 +2467,9 @@ static int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val)
 }
 
 #ifdef CONFIG_MACH_LONGCHEER
-#if defined(CONFIG_MACH_XIAOMI_WHYRED) || defined(CONFIG_MACH_XIAOMI_TULIP)
+#if defined(CONFIG_MACH_XIAOMI_WAYNE)
+#define MAX_PLUSE_COUNT_ALLOWED 20
+#elif defined(CONFIG_MACH_XIAOMI_WHYRED) || defined(CONFIG_MACH_XIAOMI_TULIP)
 #define MAX_PLUSE_COUNT_ALLOWED 15
 #else
 #define MAX_PLUSE_COUNT_ALLOWED 8

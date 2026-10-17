@@ -35,6 +35,8 @@
 
 &pm660_charger {
 	qcom,usb-icl-ua = <2900000>;
+	/* PM660's 9V ceiling: 9V * 1.65A = 14.85W maximum nominal input. */
+	qcom,usb-icl-max-ua = <1650000>;
 	qcom,otg-cl-ua = <1500000>;
 	qcom,dc-icl-ua = <2900000>;
 	qcom,fcc-max-ua = <2900000>;

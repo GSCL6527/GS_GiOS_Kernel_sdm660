@@ -183,6 +183,7 @@ static struct smb_params pm660_params = {
 
 struct smb_dt_props {
 	int	usb_icl_ua;
+	int	usb_icl_max_ua;
 	int	dc_icl_ua;
 	int	boost_threshold_ua;
 	int	wipower_max_uw;
@@ -345,6 +346,16 @@ static int smb2_parse_dt(struct smb2 *chip)
 				"qcom,usb-icl-ua", &chip->dt.usb_icl_ua);
 	if (rc < 0)
 		chip->dt.usb_icl_ua = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,usb-icl-max-ua",
+				  &chip->dt.usb_icl_max_ua);
+	if (rc < 0) {
+		chip->dt.usb_icl_max_ua = 0;
+	} else if (chip->dt.usb_icl_max_ua < chg->param.usb_icl.step_u ||
+		   chip->dt.usb_icl_max_ua > chg->param.usb_icl.max_u) {
+		dev_err(chg->dev, "Invalid maximum USB input current\n");
+		return -EINVAL;
+	}
 
 	rc = of_property_read_u32(node,
 				"qcom,otg-cl-ua", &chg->otg_cl_ua);
@@ -1806,6 +1817,12 @@ static int smb2_init_hw(struct smb2 *chip)
 	}
 
 	/* votes must be cast before configuring software control */
+	/* Keep the board ceiling across charger detection and unplug cycles. */
+	rc = vote(chg->usb_icl_votable, "BOARD_MAX",
+		  chip->dt.usb_icl_max_ua > 0, chip->dt.usb_icl_max_ua);
+	if (rc < 0)
+		return rc;
+
 	/* vote 0mA on usb_icl for non battery platforms */
 	vote(chg->usb_icl_votable,
 		DEFAULT_VOTER, chip->dt.no_battery, 0);
@@ -1836,7 +1853,15 @@ static int smb2_init_hw(struct smb2 *chip)
 			"Couldn't configure QC2.0 to 9V rc=%d\n", rc);
 		return rc;
 	}
-#if defined(CONFIG_MACH_XIAOMI_WHYRED) || defined(CONFIG_MACH_XIAOMI_TULIP)
+#if defined(CONFIG_MACH_XIAOMI_WAYNE)
+	/* PM660 supports up to 9V: (9000 - 5000) / 200 = 20 pulses. */
+	rc = smblib_masked_write(chg, HVDCP_PULSE_COUNT_MAX_REG,
+				PULSE_COUNT_QC3P0_MASK, 20);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure QC3.0 to 9V rc=%d\n", rc);
+		return rc;
+	}
+#elif defined(CONFIG_MACH_XIAOMI_WHYRED) || defined(CONFIG_MACH_XIAOMI_TULIP)
 	/* Operate the QC3.0 to limit vbus to 8.0v*/
 	rc = smblib_masked_write(chg, HVDCP_PULSE_COUNT_MAX_REG,
 						PULSE_COUNT_QC3P0_MASK, 0xf);
