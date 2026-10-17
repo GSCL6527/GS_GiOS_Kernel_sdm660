@@ -63,12 +63,19 @@ static const char * const power_supply_charge_type_text[] = {
 };
 
 static const char * const power_supply_health_text[] = {
-	"Unknown", "Good", "Overheat", "Dead", "Over voltage",
-	"Unspecified failure", "Cold", "Watchdog timer expire",
-#ifdef CONFIG_MACH_LONGCHEER
-		"Low_Cool",
-#endif
-	"Safety timer expire", "Over current", "Warm", "Cool", "Hot"
+	[POWER_SUPPLY_HEALTH_UNKNOWN] = "Unknown",
+	[POWER_SUPPLY_HEALTH_GOOD] = "Good",
+	[POWER_SUPPLY_HEALTH_OVERHEAT] = "Overheat",
+	[POWER_SUPPLY_HEALTH_DEAD] = "Dead",
+	[POWER_SUPPLY_HEALTH_OVERVOLTAGE] = "Over voltage",
+	[POWER_SUPPLY_HEALTH_UNSPEC_FAILURE] = "Unspecified failure",
+	[POWER_SUPPLY_HEALTH_COLD] = "Cold",
+	[POWER_SUPPLY_HEALTH_WATCHDOG_TIMER_EXPIRE] = "Watchdog timer expire",
+	[POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE] = "Safety timer expire",
+	[POWER_SUPPLY_HEALTH_OVERCURRENT] = "Over current",
+	[POWER_SUPPLY_HEALTH_WARM] = "Warm",
+	[POWER_SUPPLY_HEALTH_COOL] = "Cool",
+	[POWER_SUPPLY_HEALTH_HOT] = "Hot",
 };
 
 static const char * const power_supply_technology_text[] = {
