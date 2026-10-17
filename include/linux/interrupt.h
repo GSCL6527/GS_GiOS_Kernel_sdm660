@@ -232,6 +232,7 @@ extern void reaffine_perf_irqs(bool from_hotplug);
  * @irq:		Interrupt to which notification applies
  * @kref:		Reference count, for internal use
  * @work:		Work item, for internal use
+ * @next:		Additional listener linkage, for internal use
  * @notify:		Function to be called on change.  This will be
  *			called in process context.
  * @release:		Function to be called on release.  This will be
@@ -243,6 +244,7 @@ struct irq_affinity_notify {
 	unsigned int irq;
 	struct kref kref;
 	struct work_struct work;
+	struct irq_affinity_notify *next;
 	void (*notify)(struct irq_affinity_notify *, const cpumask_t *mask);
 	void (*release)(struct kref *ref);
 };
@@ -304,6 +306,8 @@ extern int irq_set_affinity_hint(unsigned int irq, const struct cpumask *m);
 
 extern int
 irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
+int irq_add_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
+void irq_remove_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
 
 struct cpumask *irq_create_affinity_masks(int nvec, const struct irq_affinity *affd);
 int irq_calc_affinity_vectors(int minvec, int maxvec, const struct irq_affinity *affd);
@@ -337,6 +341,17 @@ static inline int
 irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
 {
 	return 0;
+}
+
+static inline int
+irq_add_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
+{
+	return 0;
+}
+
+static inline void
+irq_remove_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
+{
 }
 
 static inline struct cpumask *

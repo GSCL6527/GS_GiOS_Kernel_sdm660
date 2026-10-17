@@ -313,11 +313,19 @@ static bool irq_set_affinity_deactivated(struct irq_data *data,
 	return true;
 }
 
+static void irq_schedule_affinity_notify(struct irq_affinity_notify *notify)
+{
+	kref_get(&notify->kref);
+	if (!schedule_work(&notify->work))
+		kref_put(&notify->kref, notify->release);
+}
+
 int irq_set_affinity_locked(struct irq_data *data, const struct cpumask *mask,
 			    bool force)
 {
 	struct irq_chip *chip = irq_data_get_irq_chip(data);
 	struct irq_desc *desc = irq_data_to_desc(data);
+	struct irq_affinity_notify *notify;
 	int ret = 0;
 
 	if (!chip || !chip->irq_set_affinity)
@@ -333,14 +341,10 @@ int irq_set_affinity_locked(struct irq_data *data, const struct cpumask *mask,
 		irq_copy_pending(desc, mask);
 	}
 
-	if (desc->affinity_notify) {
-		kref_get(&desc->affinity_notify->kref);
-		if (!schedule_work(&desc->affinity_notify->work)) {
-			/* Work was already scheduled, drop our extra ref */
-			kref_put(&desc->affinity_notify->kref,
-				 desc->affinity_notify->release);
-		}
-	}
+	if (desc->affinity_notify)
+		irq_schedule_affinity_notify(desc->affinity_notify);
+	for (notify = desc->affinity_notify_list; notify; notify = notify->next)
+		irq_schedule_affinity_notify(notify);
 	irqd_set(data, IRQD_AFFINITY_SET);
 
 	return ret;
@@ -452,6 +456,83 @@ irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(irq_set_affinity_notifier);
+
+/**
+ * irq_add_affinity_notifier - add an independent IRQ affinity listener
+ * @irq: interrupt to observe
+ * @notify: caller-owned context, with notify and release callbacks set
+ *
+ * Unlike irq_set_affinity_notifier(), this does not replace the legacy owner.
+ * The caller must serialize registration/removal of a context, and remove it
+ * before freeing the IRQ. A context must not be used with both APIs.
+ * Must be called in process context.
+ */
+int irq_add_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+	struct irq_affinity_notify *entry;
+	unsigned long flags;
+
+	might_sleep();
+	if (!desc || !notify || !notify->notify || !notify->release)
+		return -EINVAL;
+
+	raw_spin_lock_irqsave(&desc->lock, flags);
+	if (desc->affinity_notify == notify)
+		goto busy;
+	for (entry = desc->affinity_notify_list; entry; entry = entry->next)
+		if (entry == notify)
+			goto busy;
+
+	notify->irq = irq;
+	kref_init(&notify->kref);
+	INIT_WORK(&notify->work, irq_affinity_notify);
+	notify->next = desc->affinity_notify_list;
+	desc->affinity_notify_list = notify;
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+	return 0;
+busy:
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+	return -EBUSY;
+}
+EXPORT_SYMBOL_GPL(irq_add_affinity_notifier);
+
+/**
+ * irq_remove_affinity_notifier - remove an independently registered listener
+ * @irq: interrupt being observed
+ * @notify: context previously passed to irq_add_affinity_notifier()
+ *
+ * Prevents further scheduling and drains pending/running callbacks before
+ * dropping the registration reference. Do not call from a notify callback.
+ */
+void irq_remove_affinity_notifier(unsigned int irq,
+				struct irq_affinity_notify *notify)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+	struct irq_affinity_notify **entry;
+	unsigned long flags;
+
+	might_sleep();
+	if (!desc || !notify)
+		return;
+
+	raw_spin_lock_irqsave(&desc->lock, flags);
+	for (entry = &desc->affinity_notify_list; *entry; entry = &(*entry)->next)
+		if (*entry == notify)
+			break;
+	if (!*entry) {
+		raw_spin_unlock_irqrestore(&desc->lock, flags);
+		return;
+	}
+	*entry = notify->next;
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+
+	if (cancel_work_sync(&notify->work))
+		kref_put(&notify->kref, notify->release);
+	kref_put(&notify->kref, notify->release);
+}
+EXPORT_SYMBOL_GPL(irq_remove_affinity_notifier);
+
 
 #ifndef CONFIG_AUTO_IRQ_AFFINITY
 /*
@@ -2005,6 +2086,7 @@ const void *free_irq(unsigned int irq, void *dev_id)
 #ifdef CONFIG_SMP
 	if (WARN_ON(desc->affinity_notify))
 		desc->affinity_notify = NULL;
+	WARN_ON(desc->affinity_notify_list);
 #endif
 
 	action = __free_irq(desc, dev_id);

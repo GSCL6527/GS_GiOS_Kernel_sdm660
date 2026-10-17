@@ -85,11 +85,18 @@ struct event_timer_info *add_event_timer(uint32_t irq,
 
 	event_info->function = function;
 	event_info->data = data;
+	timerqueue_init(&event_info->node);
 
 	if (irq) {
 		struct irq_desc *desc = irq_to_desc(irq);
-		struct cpumask *mask = desc->irq_common_data.affinity;
+		struct cpumask *mask;
+		int ret;
 
+		if (!desc) {
+			kfree(event_info);
+			return NULL;
+		}
+		mask = desc->irq_common_data.affinity;
 		get_online_cpus();
 		event_info->cpu = cpumask_any_and(mask, cpu_online_mask);
 		if (event_info->cpu >= nr_cpu_ids)
@@ -97,12 +104,15 @@ struct event_timer_info *add_event_timer(uint32_t irq,
 
 		event_info->notify.notify = irq_affinity_change_notifier;
 		event_info->notify.release = irq_affinity_release;
-		irq_set_affinity_notifier(irq, &event_info->notify);
+		ret = irq_add_affinity_notifier(irq, &event_info->notify);
 		put_online_cpus();
+		if (ret) {
+			kfree(event_info);
+			return NULL;
+		}
+		event_info->irq = irq;
 	}
 
-	/* Init rb node and hr timer */
-	timerqueue_init(&event_info->node);
 	pr_debug("New Event Added. Event %pK(on cpu%d). irq %d\n",
 					event_info, event_info->cpu, irq);
 
@@ -448,6 +458,9 @@ void deactivate_event_timer(struct event_timer_info *event)
 void destroy_event_timer(struct event_timer_info *event)
 {
 	unsigned long flags;
+
+	if (event->irq)
+		irq_remove_affinity_notifier(event->irq, &event->notify);
 
 	spin_lock_irqsave(&event_timer_lock, flags);
 	if (is_event_active(event)) {
