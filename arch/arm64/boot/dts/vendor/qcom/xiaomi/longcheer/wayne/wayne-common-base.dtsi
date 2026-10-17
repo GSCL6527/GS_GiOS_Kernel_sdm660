@@ -45,6 +45,11 @@
 			= <2900000 2000000 1800000 1500000 1000000 500000 100000>;
 };
 
+&pm660_pdphy {
+	qcom,auto-select-sink-pdo;
+	qcom,default-sink-caps = <5000 1650>, <9000 1650>;
+};
+
 &pm660_fg {
 	qcom,fg-recharge-voltage = <4340>;
 };
