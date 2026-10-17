@@ -51,6 +51,8 @@
 };
 
 &pm660_fg {
+	/* Keep the stock design rating separate from learned replacement size. */
+	qcom,cl-max-limit = <0>;
 	qcom,fg-recharge-voltage = <4340>;
 };
 
