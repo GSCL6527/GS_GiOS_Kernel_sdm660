@@ -42,12 +42,14 @@ enum ssr_comm {
  * @dest_name: subsystem to which sysmon notification is being sent to
  * @source_name: subsystem which generated event that notification is being sent
  * for
+ * @task_pid: global PID of the task executing the monitored operation
  * @timer: timer for scheduling timeout
  */
 struct subsys_notif_timeout {
 	enum ssr_comm comm_type;
 	const char *dest_name;
 	const char *source_name;
+	pid_t task_pid;
 	struct timer_list timer;
 };
 
