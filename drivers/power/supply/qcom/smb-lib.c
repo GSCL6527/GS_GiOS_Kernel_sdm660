@@ -1107,8 +1107,10 @@ int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua)
 			return rc;
 		}
 		override = load_cfg & ICL_OVERRIDE_AFTER_APSD_BIT;
-		if (!override)
-			return INT_MAX;
+		if (!override) {
+			*icl_ua = INT_MAX;
+			return 0;
+		}
 
 		/* override is set */
 		rc = smblib_get_charge_param(chg, &chg->param.usb_icl, icl_ua);
