@@ -57,6 +57,10 @@
 };
 
 &pm660_haptics {
+	/* Use the input force-feedback interface consumed by the QTI HAL. */
+	compatible = "qcom,pm660-haptics";
+	interrupt-names = "hap-sc-irq", "hap-play-irq";
+	qcom,play-rate-us = <4878>;
 	/delete-property/ qcom,correct-lra-drive-freq;
 	qcom,play-mode = "buffer";
 	qcom,vmax-mv = <2204>;
@@ -72,6 +76,32 @@
 	qcom,lra-high-z = "opt1";
 	qcom,lra-auto-res-mode = "none";
 	qcom,lra-hw-auto-resonance;
+
+	/* Keep predefined effects within Wayne's motor voltage and frequency. */
+	wf_0 {
+		qcom,wf-vmax-mv = <2204>;
+		qcom,wf-play-rate-us = <4878>;
+	};
+	wf_1 {
+		qcom,wf-vmax-mv = <2204>;
+		qcom,wf-play-rate-us = <4878>;
+	};
+	wf_2 {
+		qcom,wf-vmax-mv = <2204>;
+		qcom,wf-play-rate-us = <4878>;
+	};
+	wf_3 {
+		qcom,wf-vmax-mv = <2204>;
+		qcom,wf-play-rate-us = <4878>;
+	};
+	wf_4 {
+		qcom,wf-vmax-mv = <2204>;
+		qcom,wf-play-rate-us = <4878>;
+	};
+	wf_5 {
+		qcom,wf-vmax-mv = <2204>;
+		qcom,wf-play-rate-us = <4878>;
+	};
 };
 
 
