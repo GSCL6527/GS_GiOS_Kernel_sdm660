@@ -547,6 +547,15 @@ static irqreturn_t tas2557_irq_handler(int irq, void *dev_id)
 {
 	struct tas2557_priv *pTAS2557 = (struct tas2557_priv *)dev_id;
 
+	/*
+	 * LKGeek: when the amp is not powered its INT line is not meaningful and
+	 * the i2c writes below cannot be acknowledged. Touching the bus from the
+	 * hardirq handler in that state only produces a spurious-IRQ storm
+	 * (observed: 84 interrupts in 17 s with "device not powered").
+	 */
+	if (!pTAS2557->mbPowerUp)
+		return IRQ_HANDLED;
+
 	tas2557_enableIRQ(pTAS2557, false, false);
 	/* get IRQ status after 100 ms */
 	schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(100));
