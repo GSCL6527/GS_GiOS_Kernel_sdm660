@@ -1281,7 +1281,7 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_DP_DM:
 		val->intval = chg->pulse_cnt;
 		break;
-#ifdef CONFIG_MACH_LONGCHEER
+#if defined(CONFIG_MACH_LONGCHEER) && !defined(CONFIG_MACH_XIAOMI_WAYNE)
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		rc = smblib_get_prop_battery_full_design(chg, val);
 		break;
@@ -1291,7 +1291,7 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-#ifndef CONFIG_MACH_LONGCHEER
+#if !defined(CONFIG_MACH_LONGCHEER) || defined(CONFIG_MACH_XIAOMI_WAYNE)
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 #endif
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
