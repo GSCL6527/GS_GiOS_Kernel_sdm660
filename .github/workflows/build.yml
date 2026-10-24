@@ -1,4 +1,4 @@
-name: Build Kernel Wayne with ReSukiSU (Main Repo)
+name: Build Kernel Wayne with ReSukiSU
 
 on:
   workflow_dispatch:
@@ -16,12 +16,9 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y bc bison build-essential ccache curl flex \
-        g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev \
-        lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 \
-        libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
-        rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+        libelf-dev liblz4-tool libssl-dev lzop zip cpio python3 device-tree-compiler
 
-    - name: Maximize build space (fix swap busy)
+    - name: Maximize build space
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell
         sudo swapoff /swapfile 2>/dev/null || true
@@ -35,7 +32,7 @@ jobs:
     - name: Download Proton Clang
       run: git clone https://github.com/kdrag0n/proton-clang.git --depth=1 $GITHUB_WORKSPACE/clang
 
-    - name: Setup ReSukiSU (Kernel module dir)
+    - name: Setup ReSukiSU (KernelSU module)
       run: |
         rm -rf KernelSU drivers/kernelsu
         git clone https://github.com/ReSukiSU/ReSukiSU.git KernelSU
@@ -43,18 +40,24 @@ jobs:
         git checkout 9cca1f097ce3b1dacbc7e181e93f7120ea2f1729
         cd ..
         ln -sf $(pwd)/KernelSU/kernel $(pwd)/drivers/kernelsu
-        if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
-          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+        # drivers/Kconfig and drivers/Makefile already source kernelsu via obj-$(CONFIG_KSU)
+
+    - name: Enable KernelSU in defconfig
+      run: |
+        DEFCONFIG=arch/arm64/configs/vendor/wayne-oss-perf_defconfig
+        if grep -q "^# CONFIG_KSU is not set" $DEFCONFIG; then
+          sed -i 's/^# CONFIG_KSU is not set$/CONFIG_KSU=y/' $DEFCONFIG
+        elif ! grep -q "^CONFIG_KSU=y" $DEFCONFIG; then
+          echo "CONFIG_KSU=y" >> $DEFCONFIG
         fi
-        if ! grep -q "kernelsu/" drivers/Makefile; then
-          echo 'obj-y += kernelsu/' >> drivers/Makefile
-        fi
+        grep -n "KSU" $DEFCONFIG
 
     - name: Build Kernel
       run: |
         export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
+        EXTRAVERSION="-ReKSU-$(date +%Y%m%d)"
 
         MAKE_ARGS="CC=clang \
                    LD=ld.lld \
@@ -63,35 +66,51 @@ jobs:
                    OBJCOPY=llvm-objcopy \
                    OBJDUMP=llvm-objdump \
                    STRIP=llvm-strip \
-                   CROSS_COMPILE=aarch64-linux-gnu- \
-                   CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+                   CROSS_COMPILE=aarch64-linux-android- \
+                   CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+                   CLANG_TRIPLE=aarch64-linux-gnu- \
                    KCFLAGS=-Wno-error"
 
         make mrproper
-        make vendor/wayne-oss-perf_defconfig $MAKE_ARGS EXTRAVERSION="-ReKSU-$(date +%Y%m%d)"
-        make -j$(nproc --all) $MAKE_ARGS
+        make vendor/wayne-oss-perf_defconfig $MAKE_ARGS EXTRAVERSION=$EXTRAVERSION
+        if ! grep -q "^CONFIG_KSU=y" .config; then
+          echo "::error::CONFIG_KSU was not enabled in final .config"
+          grep -i ksu .config || true
+          exit 1
+        fi
+        echo "CONFIG_KSU=y confirmed in .config"
+        make -j$(nproc --all) $MAKE_ARGS EXTRAVERSION=$EXTRAVERSION Image.gz-dtb
+        ls -lh arch/arm64/boot/Image.gz-dtb
 
     - name: Package with AnyKernel3
       run: |
-        git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+        git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
         cp arch/arm64/boot/Image.gz-dtb AnyKernel3/
         cd AnyKernel3
+        rm -rf .git .github *placeholder
         cat > anykernel.sh << 'EOF'
-        kernel.string=Wayne_ReKSU_Build
+        kernel.string=GS_GiOS_Kernel_sdm660-4.19.325-ReKSU
         do.devicecheck=1
         do.modules=0
         do.systemless=1
         do.cleanup=1
         device.name1=wayne
+        device.name2=wayne_eea
         block=/dev/block/bootdevice/by-name/boot;
         is_slot_device=0;
+        ramdisk_compression=false;
         EOF
-        rm -f *placeholder
-        zip -r9 ../Kernel-Wayne-$(date +%Y%m%d)-ReKSU.zip *
+        zip -r9 ../GS-Kernel-Wayne-4.19.325-ReKSU-$(date +%Y%m%d).zip *
         cd ..
 
-    - name: Upload Artifact
+    - name: Upload flashable zip
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Wayne-ReKSU
-        path: Kernel-Wayne-*.zip
+        name: GS-Kernel-Wayne-AnyKernel3
+        path: GS-Kernel-Wayne-*.zip
+
+    - name: Upload raw Image.gz-dtb
+      uses: actions/upload-artifact@v4
+      with:
+        name: Image.gz-dtb
+        path: arch/arm64/boot/Image.gz-dtb
