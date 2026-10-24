@@ -55,6 +55,11 @@ jobs:
         sed -i 's/^CONFIG_LOCALVERSION_AUTO=y$/# CONFIG_LOCALVERSION_AUTO is not set/' $DEFCONFIG
         grep -n "KSU\|LOCALVERSION" $DEFCONFIG
 
+        # clang cannot resolve TRACE_INCLUDE_PATH '.' in clk-debug trace
+        # points; add the source dir to the include path (standard fix).
+        grep -q "CFLAGS_clk-debug" drivers/clk/qcom/Makefile || \
+          echo 'CFLAGS_clk-debug.o = -I$(src)' >> drivers/clk/qcom/Makefile
+
     - name: Build Kernel
       run: |
         export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
