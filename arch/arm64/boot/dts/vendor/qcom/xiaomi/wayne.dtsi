@@ -22,6 +22,7 @@
 			vendor {
 				compatible = "android,vendor";
 				dev = "/dev/block/platform/soc/c0c4000.sdhci/by-name/vendor";
+				mnt_point = "/vendor";
 				type = "ext4";
 				mnt_flags = "ro,barrier=1";
 				fsmgr_flags = "wait";
@@ -31,8 +32,30 @@
 			system {
 				compatible = "android,system";
 				dev = "/dev/block/platform/soc/c0c4000.sdhci/by-name/system";
+				mnt_point = "/system";
 				type = "ext4";
 				mnt_flags = "ro,barrier=1";
+				fsmgr_flags = "wait";
+				status = "okay";
+			};
+
+			/* First-stage init tries alternatives for the same mount point. */
+			vendor_erofs {
+				compatible = "android,vendor";
+				dev = "/dev/block/platform/soc/c0c4000.sdhci/by-name/vendor";
+				mnt_point = "/vendor";
+				type = "erofs";
+				mnt_flags = "ro";
+				fsmgr_flags = "wait";
+				status = "okay";
+			};
+
+			system_erofs {
+				compatible = "android,system";
+				dev = "/dev/block/platform/soc/c0c4000.sdhci/by-name/system";
+				mnt_point = "/system";
+				type = "erofs";
+				mnt_flags = "ro";
 				fsmgr_flags = "wait";
 				status = "okay";
 			};

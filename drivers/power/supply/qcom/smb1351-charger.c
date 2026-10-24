@@ -1730,7 +1730,7 @@ static int smb1351_parallel_set_property(struct power_supply *psy,
 				       enum power_supply_property prop,
 				       const union power_supply_propval *val)
 {
-	int rc = 0, index;
+	int rc = 0, index, vfloat_mv;
 	struct smb1351_charger *chip = power_supply_get_drvdata(psy);
 
 	switch (prop) {
@@ -1760,9 +1760,13 @@ static int smb1351_parallel_set_property(struct power_supply *psy,
 						chip->usb_psy_ma);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		chip->vfloat_mv = val->intval / 1000;
+		vfloat_mv = val->intval / 1000;
+		if (vfloat_mv < MIN_FLOAT_MV || vfloat_mv > MAX_FLOAT_MV)
+			return -EINVAL;
 		if (!chip->parallel_charger_suspended)
-			rc = smb1351_float_voltage_set(chip, val->intval);
+			rc = smb1351_float_voltage_set(chip, vfloat_mv);
+		if (!rc)
+			chip->vfloat_mv = vfloat_mv;
 		break;
 	default:
 		return -EINVAL;
@@ -1799,7 +1803,7 @@ static int smb1351_parallel_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		if (!chip->parallel_charger_suspended)
-			val->intval = chip->vfloat_mv;
+			val->intval = chip->vfloat_mv * 1000;
 		else
 			val->intval = 0;
 		break;

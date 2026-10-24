@@ -1444,7 +1444,8 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 #endif
 
 #if NVT_TOUCH_ESD_PROTECT
-	INIT_DELAYED_WORK(&nvt_esd_check_work, nvt_esd_check_func);
+	/* Check with the next CPU wakeup instead of waking an idle CPU. */
+	INIT_DEFERRABLE_WORK(&nvt_esd_check_work, nvt_esd_check_func);
 	nvt_esd_check_wq = create_workqueue("nvt_esd_check_wq");
 	queue_delayed_work(nvt_esd_check_wq, &nvt_esd_check_work,
 			msecs_to_jiffies(NVT_TOUCH_ESD_CHECK_PERIOD));
