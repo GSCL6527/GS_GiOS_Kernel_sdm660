@@ -50,14 +50,17 @@ jobs:
         elif ! grep -q "^CONFIG_KSU=y" $DEFCONFIG; then
           echo "CONFIG_KSU=y" >> $DEFCONFIG
         fi
-        grep -n "KSU" $DEFCONFIG
+        # Disable git-hash version suffix: with LOCALVERSION_AUTO=y the full
+        # release string exceeds the 64-char limit and the build aborts.
+        sed -i 's/^CONFIG_LOCALVERSION_AUTO=y$/# CONFIG_LOCALVERSION_AUTO is not set/' $DEFCONFIG
+        grep -n "KSU\|LOCALVERSION" $DEFCONFIG
 
     - name: Build Kernel
       run: |
         export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
-        EXTRAVERSION="-ReKSU-$(date +%Y%m%d)"
+        EXTRAVERSION="-ReKSU-$(date +%m%d)"
 
         MAKE_ARGS="CC=clang \
                    LD=ld.lld \
