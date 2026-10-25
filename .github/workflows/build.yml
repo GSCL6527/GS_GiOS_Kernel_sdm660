@@ -63,6 +63,10 @@ jobs:
         # Disable git-hash version suffix: with LOCALVERSION_AUTO=y the full
         # release string exceeds the 64-char limit and the build aborts.
         sed -i 's/^CONFIG_LOCALVERSION_AUTO=y$/# CONFIG_LOCALVERSION_AUTO is not set/' $DEFCONFIG
+        # Exact release string: 4.19.325-GSKernel-ReSukiSU-perf
+        # (localversion* files in tree root would append -cip132-st16, so empty them)
+        sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-GSKernel-ReSukiSU-perf"/' $DEFCONFIG
+        for f in localversion*; do [ -f "$f" ] && : > "$f"; done
         grep -n "KSU\|LOCALVERSION" $DEFCONFIG
 
         # clang cannot resolve TRACE_INCLUDE_PATH '.' in clk-debug trace
@@ -92,7 +96,6 @@ jobs:
         export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
-        EXTRAVERSION="-ReKSU-$(date +%m%d)"
 
         MAKE_ARGS="CC=clang \
                    LD=ld.lld \
@@ -107,15 +110,19 @@ jobs:
                    KCFLAGS=-Wno-error"
 
         make mrproper
-        make vendor/wayne-oss-perf_defconfig $MAKE_ARGS EXTRAVERSION=$EXTRAVERSION
+        make vendor/wayne-oss-perf_defconfig $MAKE_ARGS
         if ! grep -q "^CONFIG_KSU=y" .config; then
           echo "::error::CONFIG_KSU was not enabled in final .config"
           grep -i ksu .config || true
           exit 1
         fi
         echo "CONFIG_KSU=y confirmed in .config"
-        make -j$(nproc --all) $MAKE_ARGS EXTRAVERSION=$EXTRAVERSION Image.gz-dtb
+        make -j$(nproc --all) $MAKE_ARGS Image.gz-dtb
         ls -lh arch/arm64/boot/Image.gz-dtb
+        # Verify exact release string baked into the binary
+        VER=$(gzip -dc arch/arm64/boot/Image.gz-dtb 2>/dev/null | strings | grep -m1 -o "4\.19\.325-GSKernel-ReSukiSU-perf" || true)
+        echo "kernel release in binary: $VER"
+        [ "$VER" = "4.19.325-GSKernel-ReSukiSU-perf" ] || { echo "::error::version string mismatch"; exit 1; }
 
     - name: Package with AnyKernel3
       run: |
@@ -124,7 +131,7 @@ jobs:
         cd AnyKernel3
         rm -rf .git .github *placeholder
         cat > anykernel.sh << 'EOF'
-        kernel.string=GS_GiOS_Kernel_sdm660-4.19.325-ReKSU
+        kernel.string=4.19.325-GSKernel-ReSukiSU-perf
         do.devicecheck=1
         do.modules=0
         do.systemless=1
@@ -135,7 +142,7 @@ jobs:
         is_slot_device=0;
         ramdisk_compression=false;
         EOF
-        zip -r9 ../GS-Kernel-Wayne-4.19.325-ReKSU-$(date +%Y%m%d).zip *
+        zip -r9 ../GS-Kernel-Wayne-4.19.325-GSKernel-ReSukiSU-perf.zip *
         cd ..
 
     - name: Upload flashable zip
