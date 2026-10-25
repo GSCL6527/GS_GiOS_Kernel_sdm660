@@ -71,6 +71,12 @@ jobs:
           done
         fi
 
+        # ipa_v2/ipa_trace.h uses TRACE_INCLUDE_PATH '.' which clang cannot
+        # resolve; add the dir to the include path for all ipa_v2 objects.
+        IPA_MK=drivers/platform/msm/ipa/ipa_v2/Makefile
+        grep -q "subdir-ccflags-y" $IPA_MK || \
+          echo 'subdir-ccflags-y += -I$(srctree)/drivers/platform/msm/ipa/ipa_v2' >> $IPA_MK
+
     - name: Build Kernel
       run: |
         export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
