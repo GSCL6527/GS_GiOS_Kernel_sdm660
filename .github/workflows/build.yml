@@ -59,6 +59,11 @@ jobs:
         # points; add the source dir to the include path (standard fix).
         grep -q "CFLAGS_clk-debug" drivers/clk/qcom/Makefile || \
           echo 'CFLAGS_clk-debug.o = -I$(src)' >> drivers/clk/qcom/Makefile
+        # camera_v2-oss/common/Makefile lacks the -I for its own dir, so
+        # <msm_camera_tz_util.h> in cam_smmu_api.c is not found by clang.
+        CAM_MK=drivers/media/platform/msm/camera_v2-oss/common/Makefile
+        grep -q "camera_v2-oss/common" $CAM_MK || \
+          echo 'ccflags-y += -I$(srctree)/drivers/media/platform/msm/camera_v2-oss/common' >> $CAM_MK
 
     - name: Build Kernel
       run: |
