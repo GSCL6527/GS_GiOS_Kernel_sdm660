@@ -36,8 +36,12 @@ jobs:
       run: |
         rm -rf KernelSU drivers/kernelsu
         git clone https://github.com/ReSukiSU/ReSukiSU.git KernelSU
+        # NOTE: do NOT pin an old commit: the fs/exec.c hooks in this kernel
+        # call ksu_handle_post_execveat_sucompat(), which only exists in
+        # recent ReSukiSU (guarded by CONFIG_KSU_SUSFS). This kernel tree
+        # ships SUSFS (fs/susfs.c), so SUSFS mode is required.
         cd KernelSU
-        git checkout 9cca1f097ce3b1dacbc7e181e93f7120ea2f1729
+        git log -1 --format="ReSukiSU HEAD: %H %ci"
         cd ..
         ln -sf $(pwd)/KernelSU/kernel $(pwd)/drivers/kernelsu
         # drivers/Kconfig and drivers/Makefile already source kernelsu via obj-$(CONFIG_KSU)
@@ -49,6 +53,12 @@ jobs:
           sed -i 's/^# CONFIG_KSU is not set$/CONFIG_KSU=y/' $DEFCONFIG
         elif ! grep -q "^CONFIG_KSU=y" $DEFCONFIG; then
           echo "CONFIG_KSU=y" >> $DEFCONFIG
+        fi
+        # Kernel tree has SUSFS (fs/susfs.c); fs hooks expect SUSFS mode.
+        if grep -q "^# CONFIG_KSU_SUSFS is not set" $DEFCONFIG; then
+          sed -i 's/^# CONFIG_KSU_SUSFS is not set$/CONFIG_KSU_SUSFS=y/' $DEFCONFIG
+        elif ! grep -q "^CONFIG_KSU_SUSFS=y" $DEFCONFIG; then
+          echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
         fi
         # Disable git-hash version suffix: with LOCALVERSION_AUTO=y the full
         # release string exceeds the 64-char limit and the build aborts.
