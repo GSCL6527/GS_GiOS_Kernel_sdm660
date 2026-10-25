@@ -59,14 +59,15 @@ jobs:
         # points; add the source dir to the include path (standard fix).
         grep -q "CFLAGS_clk-debug" drivers/clk/qcom/Makefile || \
           echo 'CFLAGS_clk-debug.o = -I$(src)' >> drivers/clk/qcom/Makefile
-        # camera_v2-oss: parent Makefile uses ccflags-y which is NOT inherited
-        # by subdir objects, so headers like msm_isp.h / msm_camera_tz_util.h
-        # cannot be found. Mirror all include dirs as subdir-ccflags-y.
+        # camera_v2-oss: ccflags-y from parent Makefiles are not inherited by
+        # subdir objects, and clang (unlike gcc) does not search include-stack
+        # dirs for quoted includes. Add every dir under the camera tree as a
+        # subdir-ccflags-y include (verified: no duplicate header names).
         CAM_BASE=drivers/media/platform/msm/camera_v2-oss
         CAM_MK=$CAM_BASE/Makefile
         if ! grep -q "subdir-ccflags-y" $CAM_MK; then
-          for d in "" sensor codecs isp pproc msm_vb2 camera jpeg_10 jpeg_dma fd common; do
-            printf 'subdir-ccflags-y += -I$(srctree)/%s\n' "$CAM_BASE/$d" >> $CAM_MK
+          find $CAM_BASE -type d | while read -r d; do
+            printf 'subdir-ccflags-y += -I$(srctree)/%s\n' "$d" >> $CAM_MK
           done
         fi
 
