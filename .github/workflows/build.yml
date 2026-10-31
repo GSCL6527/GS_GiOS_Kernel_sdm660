@@ -2,6 +2,13 @@ name: Build Kernel Wayne with ReSukiSU
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build.yml'
+      - 'arch/arm64/configs/vendor/wayne-oss-perf_defconfig'
+      - 'localversion*'
 
 jobs:
   build:
